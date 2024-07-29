@@ -1,4 +1,4 @@
-- 🛠️ I’m currently working on The Biggest AIO Checker Tool (+30 Account Checkers)
+-🛠️ I’m currently working on The Biggest AIO Checker Tool (+30 Account Checkers)
   
 -🌱 I’m currently learning 𝐂# & C++
 
