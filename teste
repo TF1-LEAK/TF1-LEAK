@@ -1,15 +1,23 @@
--- rivals_cheat.lua
--- [ESP | SilentAim | SpeedHack | InfJump]
--- Temu's Rivals Cheat Suite — handcrafted, no framework
+-- rivals_cheat_v2.lua
+-- [ESP fix onScreen | Loading Screen | Toggle Menu | Echap toggle]
+-- Temu's Rivals Suite v2 — handcrafted
 
---// SERVICES
-local Players         = game:GetService("Players")
-local RunService      = game:GetService("RunService")
-local UserInputService= game:GetService("UserInputService")
-local Camera          = workspace.CurrentCamera
-local LocalPlayer     = Players.LocalPlayer
+--// ============================================================
+--//  SERVICES & CORE
+--// ============================================================
 
---// CONFIG — modifie ici broddy
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local Camera           = workspace.CurrentCamera
+local LocalPlayer      = Players.LocalPlayer
+local PlayerGui        = LocalPlayer:WaitForChild("PlayerGui")
+
+--// ============================================================
+--//  CONFIG
+--// ============================================================
+
 local CFG = {
     ESP = {
         Enabled     = true,
@@ -25,18 +33,293 @@ local CFG = {
     },
     AIM = {
         Enabled     = true,
-        FOV         = 120,          -- pixels radius
-        Bone        = "Head",       -- "Head" | "HumanoidRootPart" | "UpperTorso"
-        Smoothing   = 0.18,         -- 0.0 = instant, 1.0 = très smooth
+        FOV         = 120,
+        Bone        = "Head",
+        Smoothing   = 0.18,
         TeamCheck   = true,
-        VisCheck    = false,        -- raycast visibility check
     },
     MOVEMENT = {
         SpeedEnabled    = true,
-        SpeedMultiplier = 2.4,      -- x fois la vitesse de base
+        SpeedMultiplier = 2.4,
         InfJump         = true,
     },
 }
+
+--// ============================================================
+--//  LOADING SCREEN
+--// ============================================================
+
+local function createLoadingScreen()
+    local sg = Instance.new("ScreenGui")
+    sg.Name             = "RivalsLoader"
+    sg.ResetOnSpawn     = false
+    sg.IgnoreGuiInset   = true
+    sg.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
+    sg.Parent           = PlayerGui
+
+    -- fond noir
+    local bg = Instance.new("Frame")
+    bg.Size            = UDim2.fromScale(1, 1)
+    bg.BackgroundColor3= Color3.fromRGB(8, 8, 12)
+    bg.BorderSizePixel = 0
+    bg.Parent          = sg
+
+    -- titre
+    local title = Instance.new("TextLabel")
+    title.Size              = UDim2.new(1, 0, 0, 50)
+    title.Position          = UDim2.new(0, 0, 0.38, 0)
+    title.BackgroundTransparency = 1
+    title.Text              = "RIVALS CHEAT"
+    title.TextColor3        = Color3.fromRGB(255, 60, 60)
+    title.Font              = Enum.Font.GothamBold
+    title.TextSize          = 32
+    title.Parent            = bg
+
+    -- sous-titre
+    local sub = Instance.new("TextLabel")
+    sub.Size               = UDim2.new(1, 0, 0, 24)
+    sub.Position           = UDim2.new(0, 0, 0.48, 0)
+    sub.BackgroundTransparency = 1
+    sub.Text               = "by Temu  •  v2.0"
+    sub.TextColor3         = Color3.fromRGB(160, 160, 160)
+    sub.Font               = Enum.Font.Gotham
+    sub.TextSize           = 14
+    sub.Parent             = bg
+
+    -- barre de progression (conteneur)
+    local barBg = Instance.new("Frame")
+    barBg.Size              = UDim2.new(0, 300, 0, 4)
+    barBg.Position          = UDim2.new(0.5, -150, 0.58, 0)
+    barBg.BackgroundColor3  = Color3.fromRGB(30, 30, 40)
+    barBg.BorderSizePixel   = 0
+    barBg.Parent            = bg
+    Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
+
+    -- barre de progression (fill)
+    local barFill = Instance.new("Frame")
+    barFill.Size             = UDim2.new(0, 0, 1, 0)
+    barFill.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+    barFill.BorderSizePixel  = 0
+    barFill.Parent           = barBg
+    Instance.new("UICorner", barFill).CornerRadius = UDim.new(1, 0)
+
+    -- status text
+    local status = Instance.new("TextLabel")
+    status.Size              = UDim2.new(1, 0, 0, 20)
+    status.Position          = UDim2.new(0, 0, 0.63, 0)
+    status.BackgroundTransparency = 1
+    status.Text              = "Initialisation..."
+    status.TextColor3        = Color3.fromRGB(120, 120, 120)
+    status.Font              = Enum.Font.Code
+    status.TextSize          = 13
+    status.Parent            = bg
+
+    -- séquence de chargement
+    local steps = {
+        { txt = "Injection du payload...",       pct = 0.20 },
+        { txt = "Hook WorldToViewportPoint...",  pct = 0.45 },
+        { txt = "Initialisation ESP...",         pct = 0.65 },
+        { txt = "Chargement du menu...",         pct = 0.85 },
+        { txt = "Prêt.",                         pct = 1.00 },
+    }
+
+    for _, step in ipairs(steps) do
+        status.Text = step.txt
+        TweenService:Create(barFill,
+            TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            { Size = UDim2.new(step.pct, 0, 1, 0) }
+        ):Play()
+        task.wait(0.42)
+    end
+
+    task.wait(0.3)
+
+    -- fade out
+    TweenService:Create(bg,
+        TweenInfo.new(0.5, Enum.EasingStyle.Linear),
+        { BackgroundTransparency = 1 }
+    ):Play()
+    TweenService:Create(title,  TweenInfo.new(0.5), { TextTransparency = 1 }):Play()
+    TweenService:Create(sub,    TweenInfo.new(0.5), { TextTransparency = 1 }):Play()
+    TweenService:Create(status, TweenInfo.new(0.5), { TextTransparency = 1 }):Play()
+
+    task.wait(0.55)
+    sg:Destroy()
+end
+
+createLoadingScreen()
+
+--// ============================================================
+--//  MENU GUI  (Echap = toggle)
+--// ============================================================
+
+local menuOpen = false
+
+local menuSG = Instance.new("ScreenGui")
+menuSG.Name           = "RivalsMenu"
+menuSG.ResetOnSpawn   = false
+menuSG.IgnoreGuiInset = true
+menuSG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+menuSG.Parent         = PlayerGui
+
+-- panneau principal
+local panel = Instance.new("Frame")
+panel.Size              = UDim2.new(0, 280, 0, 340)
+panel.Position          = UDim2.new(0.5, -140, 0.5, -170)
+panel.BackgroundColor3  = Color3.fromRGB(12, 12, 18)
+panel.BorderSizePixel   = 0
+panel.Visible           = false
+panel.Parent            = menuSG
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
+
+-- stroke
+local stroke = Instance.new("UIStroke")
+stroke.Color     = Color3.fromRGB(255, 60, 60)
+stroke.Thickness = 1.5
+stroke.Parent    = panel
+
+-- header bar
+local header = Instance.new("Frame")
+header.Size            = UDim2.new(1, 0, 0, 36)
+header.BackgroundColor3= Color3.fromRGB(255, 60, 60)
+header.BorderSizePixel = 0
+header.Parent          = panel
+local hCorner = Instance.new("UICorner")
+hCorner.CornerRadius   = UDim.new(0, 10)
+hCorner.Parent         = header
+
+-- fix coin bas du header (pour que seul le haut soit arrondi)
+local hFix = Instance.new("Frame")
+hFix.Size              = UDim2.new(1, 0, 0, 10)
+hFix.Position          = UDim2.new(0, 0, 1, -10)
+hFix.BackgroundColor3  = Color3.fromRGB(255, 60, 60)
+hFix.BorderSizePixel   = 0
+hFix.Parent            = header
+
+local headerLbl = Instance.new("TextLabel")
+headerLbl.Size         = UDim2.fromScale(1, 1)
+headerLbl.BackgroundTransparency = 1
+headerLbl.Text         = "⚡  RIVALS CHEAT  •  v2"
+headerLbl.TextColor3   = Color3.fromRGB(255, 255, 255)
+headerLbl.Font         = Enum.Font.GothamBold
+headerLbl.TextSize     = 14
+headerLbl.Parent       = header
+
+-- hint echap
+local hintLbl = Instance.new("TextLabel")
+hintLbl.Size           = UDim2.new(1, 0, 0, 16)
+hintLbl.Position       = UDim2.new(0, 0, 0, 38)
+hintLbl.BackgroundTransparency = 1
+hintLbl.Text           = "[ECHAP] pour fermer"
+hintLbl.TextColor3     = Color3.fromRGB(80, 80, 80)
+hintLbl.Font           = Enum.Font.Code
+hintLbl.TextSize       = 11
+hintLbl.Parent         = panel
+
+-- layout pour les toggles
+local layout = Instance.new("UIListLayout")
+layout.Padding         = UDim.new(0, 8)
+layout.SortOrder       = Enum.SortOrder.LayoutOrder
+layout.Parent          = panel
+
+-- spacer après header + hint
+local spacer = Instance.new("Frame")
+spacer.Size            = UDim2.new(1, 0, 0, 54)
+spacer.BackgroundTransparency = 1
+spacer.LayoutOrder     = 0
+spacer.Parent          = panel
+
+--// helper : crée un toggle row
+local function makeToggle(label, state, order, callback)
+    local row = Instance.new("Frame")
+    row.Size              = UDim2.new(1, -24, 0, 36)
+    row.BackgroundColor3  = Color3.fromRGB(20, 20, 30)
+    row.BorderSizePixel   = 0
+    row.LayoutOrder       = order
+    row.Parent            = panel
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+
+    -- padding gauche
+    local lbl = Instance.new("TextLabel")
+    lbl.Size             = UDim2.new(1, -60, 1, 0)
+    lbl.Position         = UDim2.new(0, 12, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text             = label
+    lbl.TextColor3       = Color3.fromRGB(210, 210, 210)
+    lbl.Font             = Enum.Font.Gotham
+    lbl.TextSize         = 13
+    lbl.TextXAlignment   = Enum.TextXAlignment.Left
+    lbl.Parent           = row
+
+    -- pill toggle
+    local pillBg = Instance.new("Frame")
+    pillBg.Size            = UDim2.new(0, 44, 0, 22)
+    pillBg.Position        = UDim2.new(1, -54, 0.5, -11)
+    pillBg.BackgroundColor3= state
+        and Color3.fromRGB(255, 60, 60)
+        or  Color3.fromRGB(45, 45, 60)
+    pillBg.BorderSizePixel = 0
+    pillBg.Parent          = row
+    Instance.new("UICorner", pillBg).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("Frame")
+    knob.Size              = UDim2.new(0, 16, 0, 16)
+    knob.Position          = state
+        and UDim2.new(1, -19, 0.5, -8)
+        or  UDim2.new(0, 3, 0.5, -8)
+    knob.BackgroundColor3  = Color3.fromRGB(255, 255, 255)
+    knob.BorderSizePixel   = 0
+    knob.Parent            = pillBg
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local on = state
+
+    local btn = Instance.new("TextButton")
+    btn.Size               = UDim2.fromScale(1, 1)
+    btn.BackgroundTransparency = 1
+    btn.Text               = ""
+    btn.Parent             = row
+
+    btn.MouseButton1Click:Connect(function()
+        on = not on
+        TweenService:Create(pillBg, TweenInfo.new(0.18), {
+            BackgroundColor3 = on
+                and Color3.fromRGB(255, 60, 60)
+                or  Color3.fromRGB(45, 45, 60)
+        }):Play()
+        TweenService:Create(knob, TweenInfo.new(0.18), {
+            Position = on
+                and UDim2.new(1, -19, 0.5, -8)
+                or  UDim2.new(0, 3, 0.5, -8)
+        }):Play()
+        callback(on)
+    end)
+
+    return row
+end
+
+-- padding gauche global
+local uiPad = Instance.new("UIPadding")
+uiPad.PaddingLeft  = UDim.new(0, 12)
+uiPad.PaddingRight = UDim.new(0, 12)
+uiPad.Parent       = panel
+
+makeToggle("ESP Boxes",    CFG.ESP.Boxes,           1, function(v) CFG.ESP.Boxes    = v end)
+makeToggle("ESP Noms",     CFG.ESP.Names,           2, function(v) CFG.ESP.Names    = v end)
+makeToggle("ESP Distance", CFG.ESP.Distance,        3, function(v) CFG.ESP.Distance = v end)
+makeToggle("ESP Tracers",  CFG.ESP.Tracer,          4, function(v) CFG.ESP.Tracer   = v end)
+makeToggle("Silent Aim",   CFG.AIM.Enabled,         5, function(v) CFG.AIM.Enabled  = v end)
+makeToggle("Speed Hack",   CFG.MOVEMENT.SpeedEnabled,6, function(v) CFG.MOVEMENT.SpeedEnabled = v end)
+makeToggle("Inf Jump",     CFG.MOVEMENT.InfJump,    7, function(v) CFG.MOVEMENT.InfJump      = v end)
+
+-- toggle menu avec Echap
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.Escape then
+        menuOpen = not menuOpen
+        panel.Visible = menuOpen
+    end
+end)
 
 --// ============================================================
 --//  DRAWING OBJECTS POOL
@@ -54,52 +337,40 @@ local function createESPForPlayer(player)
     if player == LocalPlayer then return end
     local objs = {}
 
-    -- Box (4 lignes)
-    if CFG.ESP.Boxes then
-        objs.BoxLines = {}
-        for i = 1, 4 do
-            objs.BoxLines[i] = newDraw("Line", {
-                Thickness = 1.5,
-                Color     = CFG.ESP.BoxColor,
-                Visible   = false,
-                ZIndex    = 2,
-            })
-        end
-    end
-
-    -- Name
-    if CFG.ESP.Names then
-        objs.NameTag = newDraw("Text", {
-            Size      = 13,
-            Color     = CFG.ESP.NameColor,
-            Outline   = true,
-            Center    = true,
+    objs.BoxLines = {}
+    for i = 1, 4 do
+        objs.BoxLines[i] = newDraw("Line", {
+            Thickness = 1.5,
+            Color     = CFG.ESP.BoxColor,
             Visible   = false,
-            ZIndex    = 3,
+            ZIndex    = 2,
         })
     end
 
-    -- Distance
-    if CFG.ESP.Distance then
-        objs.DistTag = newDraw("Text", {
-            Size      = 11,
-            Color     = CFG.ESP.DistColor,
-            Outline   = true,
-            Center    = true,
-            Visible   = false,
-            ZIndex    = 3,
-        })
-    end
+    objs.NameTag = newDraw("Text", {
+        Size    = 13,
+        Color   = CFG.ESP.NameColor,
+        Outline = true,
+        Center  = true,
+        Visible = false,
+        ZIndex  = 3,
+    })
 
-    -- Tracer
-    if CFG.ESP.Tracer then
-        objs.Tracer = newDraw("Line", {
-            Thickness = 1,
-            Color     = CFG.ESP.TracerColor,
-            Visible   = false,
-            ZIndex    = 1,
-        })
-    end
+    objs.DistTag = newDraw("Text", {
+        Size    = 11,
+        Color   = CFG.ESP.DistColor,
+        Outline = true,
+        Center  = true,
+        Visible = false,
+        ZIndex  = 3,
+    })
+
+    objs.Tracer = newDraw("Line", {
+        Thickness = 1,
+        Color     = CFG.ESP.TracerColor,
+        Visible   = false,
+        ZIndex    = 1,
+    })
 
     ESPObjects[player] = objs
 end
@@ -107,32 +378,55 @@ end
 local function removeESP(player)
     local objs = ESPObjects[player]
     if not objs then return end
-    if objs.BoxLines then
-        for _, l in ipairs(objs.BoxLines) do l:Remove() end
-    end
-    if objs.NameTag   then objs.NameTag:Remove()   end
-    if objs.DistTag   then objs.DistTag:Remove()   end
-    if objs.Tracer    then objs.Tracer:Remove()    end
+    for _, l in ipairs(objs.BoxLines) do l:Remove() end
+    objs.NameTag:Remove()
+    objs.DistTag:Remove()
+    objs.Tracer:Remove()
     ESPObjects[player] = nil
 end
 
---// ============================================================
---//  WORLD → SCREEN helpers
---// ============================================================
-
--- Projette un point 3D → 2D écran, retourne (vec2, onScreen)
-local function worldToScreen(pos)
-    local screenPos, onScreen = Camera:WorldToViewportPoint(pos)
-    return Vector2.new(screenPos.X, screenPos.Y), onScreen
+local function hideAll(objs)
+    for _, l in ipairs(objs.BoxLines) do l.Visible = false end
+    objs.NameTag.Visible = false
+    objs.DistTag.Visible = false
+    objs.Tracer.Visible  = false
 end
 
--- Bounding box 2D d'un character depuis ses parts
+--// ============================================================
+--//  VIEWPORT BOUNDS CHECK  ← le vrai fix du freeze
+--// ============================================================
+
+--[[
+    Camera:WorldToViewportPoint retourne onScreen=false quand le point
+    est derrière la caméra, MAIS les coordonnées X/Y peuvent quand même
+    être "dans" le viewport numériquement (valeurs résiduelles).
+    On doit donc vérifier :
+      1. onScreen == true  (le point est devant le near plane)
+      2. Les coords sont dans [0, viewportSize] (pas hors écran)
+    Si l'une des deux conditions fail → on cache les drawings.
+]]
+
+local function isOnScreen(screenPos2D, onScreen)
+    if not onScreen then return false end
+    local vp = Camera.ViewportSize
+    return screenPos2D.X >= 0
+       and screenPos2D.X <= vp.X
+       and screenPos2D.Y >= 0
+       and screenPos2D.Y <= vp.Y
+end
+
+local function worldToScreen(pos)
+    local sp, onScreen = Camera:WorldToViewportPoint(pos)
+    local v2 = Vector2.new(sp.X, sp.Y)
+    return v2, onScreen
+end
+
+--// bounding box avec double check onScreen sur top ET bottom
 local function getBoundingBox(char)
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
 
-    -- on approxime via la taille du humanoid
-    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hum    = char:FindFirstChildOfClass("Humanoid")
     local height = hum and hum.HipHeight * 2 + 0.5 or 5
 
     local top    = hrp.Position + Vector3.new(0, height * 0.5, 0)
@@ -141,7 +435,10 @@ local function getBoundingBox(char)
     local topSS,    onT = worldToScreen(top)
     local bottomSS, onB = worldToScreen(bottom)
 
-    if not onT and not onB then return nil end
+    -- si NI le top NI le bottom sont visibles à l'écran → nil
+    if not isOnScreen(topSS, onT) and not isOnScreen(bottomSS, onB) then
+        return nil
+    end
 
     local w = math.abs(topSS.X - bottomSS.X) + 40
     local h = math.abs(topSS.Y - bottomSS.Y)
@@ -151,8 +448,10 @@ local function getBoundingBox(char)
         bottom = bottomSS,
         width  = w,
         height = h,
-        center = Vector2.new((topSS.X + bottomSS.X) * 0.5,
-                             (topSS.Y + bottomSS.Y) * 0.5),
+        center = Vector2.new(
+            (topSS.X + bottomSS.X) * 0.5,
+            (topSS.Y + bottomSS.Y) * 0.5
+        ),
     }
 end
 
@@ -161,93 +460,85 @@ end
 --// ============================================================
 
 RunService.RenderStepped:Connect(function()
-    if not CFG.ESP.Enabled then return end
-
     local localRoot = LocalPlayer.Character
         and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
-
         local objs = ESPObjects[player]
         if not objs then continue end
+
+        -- ESP globalement désactivé → tout cacher
+        if not CFG.ESP.Enabled then
+            hideAll(objs)
+            continue
+        end
 
         local char = player.Character
         local hrp  = char and char:FindFirstChild("HumanoidRootPart")
         local hum  = char and char:FindFirstChildOfClass("Humanoid")
-
         local alive = hrp and hum and hum.Health > 0
 
         if not alive or not localRoot then
-            -- cache tout
-            if objs.BoxLines then
-                for _, l in ipairs(objs.BoxLines) do l.Visible = false end
-            end
-            if objs.NameTag then objs.NameTag.Visible = false end
-            if objs.DistTag then objs.DistTag.Visible = false end
-            if objs.Tracer  then objs.Tracer.Visible  = false end
+            hideAll(objs)
             continue
         end
 
         local dist = (hrp.Position - localRoot.Position).Magnitude
         if dist > CFG.ESP.MaxDist then
-            if objs.BoxLines then
-                for _, l in ipairs(objs.BoxLines) do l.Visible = false end
-            end
-            if objs.NameTag then objs.NameTag.Visible = false end
-            if objs.DistTag then objs.DistTag.Visible = false end
-            if objs.Tracer  then objs.Tracer.Visible  = false end
+            hideAll(objs)
             continue
         end
 
+        -- getBoundingBox retourne nil si hors champ → on cache
         local bb = getBoundingBox(char)
-        if not bb then continue end
-
-        local x  = bb.center.X - bb.width  * 0.5
-        local y  = bb.top.Y
-        local w  = bb.width
-        local h  = bb.height
-
-        -- Dessine les 4 côtés de la box
-        if objs.BoxLines then
-            -- Top
-            objs.BoxLines[1].From    = Vector2.new(x,     y)
-            objs.BoxLines[1].To      = Vector2.new(x + w, y)
-            objs.BoxLines[1].Visible = true
-            -- Bottom
-            objs.BoxLines[2].From    = Vector2.new(x,     y + h)
-            objs.BoxLines[2].To      = Vector2.new(x + w, y + h)
-            objs.BoxLines[2].Visible = true
-            -- Left
-            objs.BoxLines[3].From    = Vector2.new(x, y)
-            objs.BoxLines[3].To      = Vector2.new(x, y + h)
-            objs.BoxLines[3].Visible = true
-            -- Right
-            objs.BoxLines[4].From    = Vector2.new(x + w, y)
-            objs.BoxLines[4].To      = Vector2.new(x + w, y + h)
-            objs.BoxLines[4].Visible = true
+        if not bb then
+            hideAll(objs)   -- ← FIX : freeze impossible, on cache explicitement
+            continue
         end
 
-        -- Name tag
-        if objs.NameTag then
+        local x = bb.center.X - bb.width * 0.5
+        local y = bb.top.Y
+        local w = bb.width
+        local h = bb.height
+
+        -- Boxes
+        if CFG.ESP.Boxes then
+            objs.BoxLines[1].From = Vector2.new(x,     y);     objs.BoxLines[1].To = Vector2.new(x+w, y)
+            objs.BoxLines[2].From = Vector2.new(x,     y+h);   objs.BoxLines[2].To = Vector2.new(x+w, y+h)
+            objs.BoxLines[3].From = Vector2.new(x,     y);     objs.BoxLines[3].To = Vector2.new(x,   y+h)
+            objs.BoxLines[4].From = Vector2.new(x+w,   y);     objs.BoxLines[4].To = Vector2.new(x+w, y+h)
+            for _, l in ipairs(objs.BoxLines) do l.Visible = true end
+        else
+            for _, l in ipairs(objs.BoxLines) do l.Visible = false end
+        end
+
+        -- Name
+        if CFG.ESP.Names then
             objs.NameTag.Text     = player.DisplayName
             objs.NameTag.Position = Vector2.new(bb.center.X, y - 16)
             objs.NameTag.Visible  = true
+        else
+            objs.NameTag.Visible = false
         end
 
-        -- Distance tag
-        if objs.DistTag then
+        -- Distance
+        if CFG.ESP.Distance then
             objs.DistTag.Text     = string.format("[%.0fm]", dist)
             objs.DistTag.Position = Vector2.new(bb.center.X, y + h + 4)
             objs.DistTag.Visible  = true
+        else
+            objs.DistTag.Visible = false
         end
 
-        -- Tracer (bas d'écran → centre du joueur)
-        if objs.Tracer then
+        -- Tracer
+        if CFG.ESP.Tracer then
             local vp = Camera.ViewportSize
             objs.Tracer.From    = Vector2.new(vp.X * 0.5, vp.Y)
             objs.Tracer.To      = bb.center
             objs.Tracer.Visible = true
+        else
+            objs.Tracer.Visible = false
         end
     end
 end)
@@ -256,14 +547,9 @@ end)
 --//  SILENT AIM
 --// ============================================================
 
--- *ce hook fait croire au moteur que ta souris vise déjà la tête*
--- on wrap WorldToViewportPoint pour rediriger la projection
--- (compatible UNC hookfunction)
-
 local function getClosestPlayerToMouse()
     local mousePos = UserInputService:GetMouseLocation()
-    local closest  = nil
-    local bestDist = CFG.AIM.FOV
+    local closest, bestDist = nil, CFG.AIM.FOV
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
@@ -274,28 +560,23 @@ local function getClosestPlayerToMouse()
         local hum  = char and char:FindFirstChildOfClass("Humanoid")
         if not bone or not hum or hum.Health <= 0 then continue end
 
-        local screenPos, onScreen = Camera:WorldToViewportPoint(bone.Position)
+        local sp, onScreen = Camera:WorldToViewportPoint(bone.Position)
         if not onScreen then continue end
 
-        local sp   = Vector2.new(screenPos.X, screenPos.Y)
-        local dist = (sp - mousePos).Magnitude
-
+        local v2   = Vector2.new(sp.X, sp.Y)
+        local dist = (v2 - mousePos).Magnitude
         if dist < bestDist then
             bestDist = dist
             closest  = bone
         end
     end
-
     return closest
 end
 
--- Hook sur Camera:WorldToViewportPoint via getrawmetamethod + hookfunction
 if hookfunction and getrawmetamethod then
     local origWTV = getrawmetamethod(Camera, "__namecall")
-
     hookfunction(origWTV, function(self, ...)
-        local method = getnamecallmethod()
-        if method == "WorldToViewportPoint" and CFG.AIM.Enabled then
+        if getnamecallmethod() == "WorldToViewportPoint" and CFG.AIM.Enabled then
             local target = getClosestPlayerToMouse()
             if target then
                 return origWTV(self, target.Position)
@@ -314,7 +595,6 @@ RunService.Heartbeat:Connect(function()
     local char = LocalPlayer.Character
     local hum  = char and char:FindFirstChildOfClass("Humanoid")
     if hum then
-        -- on patch WalkSpeed chaque heartbeat pour contrer les resets serveur
         hum.WalkSpeed = 16 * CFG.MOVEMENT.SpeedMultiplier
     end
 end)
@@ -327,20 +607,15 @@ UserInputService.JumpRequest:Connect(function()
     if not CFG.MOVEMENT.InfJump then return end
     local char = LocalPlayer.Character
     local hum  = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum:ChangeState(Enum.HumanoidStateType.Jumping)
-    end
+    if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
 end)
 
 --// ============================================================
---//  PLAYER TRACKING — auto-add / remove
+--//  PLAYER TRACKING
 --// ============================================================
 
-for _, player in ipairs(Players:GetPlayers()) do
-    createESPForPlayer(player)
-end
-
+for _, p in ipairs(Players:GetPlayers()) do createESPForPlayer(p) end
 Players.PlayerAdded:Connect(createESPForPlayer)
 Players.PlayerRemoving:Connect(removeESP)
 
-print("[Rivals Cheat] Loaded — ESP | SilentAim | Speed | InfJump ✌️")
+print("[Rivals v2] Loaded ✌️ — Echap pour ouvrir le menu")
