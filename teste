@@ -1,0 +1,346 @@
+-- rivals_cheat.lua
+-- [ESP | SilentAim | SpeedHack | InfJump]
+-- Temu's Rivals Cheat Suite — handcrafted, no framework
+
+--// SERVICES
+local Players         = game:GetService("Players")
+local RunService      = game:GetService("RunService")
+local UserInputService= game:GetService("UserInputService")
+local Camera          = workspace.CurrentCamera
+local LocalPlayer     = Players.LocalPlayer
+
+--// CONFIG — modifie ici broddy
+local CFG = {
+    ESP = {
+        Enabled     = true,
+        BoxColor    = Color3.fromRGB(255, 60, 60),
+        NameColor   = Color3.fromRGB(255, 255, 255),
+        DistColor   = Color3.fromRGB(255, 215, 0),
+        TracerColor = Color3.fromRGB(255, 60, 60),
+        MaxDist     = 500,
+        Tracer      = true,
+        Boxes       = true,
+        Names       = true,
+        Distance    = true,
+    },
+    AIM = {
+        Enabled     = true,
+        FOV         = 120,          -- pixels radius
+        Bone        = "Head",       -- "Head" | "HumanoidRootPart" | "UpperTorso"
+        Smoothing   = 0.18,         -- 0.0 = instant, 1.0 = très smooth
+        TeamCheck   = true,
+        VisCheck    = false,        -- raycast visibility check
+    },
+    MOVEMENT = {
+        SpeedEnabled    = true,
+        SpeedMultiplier = 2.4,      -- x fois la vitesse de base
+        InfJump         = true,
+    },
+}
+
+--// ============================================================
+--//  DRAWING OBJECTS POOL
+--// ============================================================
+
+local ESPObjects = {}
+
+local function newDraw(type, props)
+    local obj = Drawing.new(type)
+    for k,v in pairs(props) do obj[k] = v end
+    return obj
+end
+
+local function createESPForPlayer(player)
+    if player == LocalPlayer then return end
+    local objs = {}
+
+    -- Box (4 lignes)
+    if CFG.ESP.Boxes then
+        objs.BoxLines = {}
+        for i = 1, 4 do
+            objs.BoxLines[i] = newDraw("Line", {
+                Thickness = 1.5,
+                Color     = CFG.ESP.BoxColor,
+                Visible   = false,
+                ZIndex    = 2,
+            })
+        end
+    end
+
+    -- Name
+    if CFG.ESP.Names then
+        objs.NameTag = newDraw("Text", {
+            Size      = 13,
+            Color     = CFG.ESP.NameColor,
+            Outline   = true,
+            Center    = true,
+            Visible   = false,
+            ZIndex    = 3,
+        })
+    end
+
+    -- Distance
+    if CFG.ESP.Distance then
+        objs.DistTag = newDraw("Text", {
+            Size      = 11,
+            Color     = CFG.ESP.DistColor,
+            Outline   = true,
+            Center    = true,
+            Visible   = false,
+            ZIndex    = 3,
+        })
+    end
+
+    -- Tracer
+    if CFG.ESP.Tracer then
+        objs.Tracer = newDraw("Line", {
+            Thickness = 1,
+            Color     = CFG.ESP.TracerColor,
+            Visible   = false,
+            ZIndex    = 1,
+        })
+    end
+
+    ESPObjects[player] = objs
+end
+
+local function removeESP(player)
+    local objs = ESPObjects[player]
+    if not objs then return end
+    if objs.BoxLines then
+        for _, l in ipairs(objs.BoxLines) do l:Remove() end
+    end
+    if objs.NameTag   then objs.NameTag:Remove()   end
+    if objs.DistTag   then objs.DistTag:Remove()   end
+    if objs.Tracer    then objs.Tracer:Remove()    end
+    ESPObjects[player] = nil
+end
+
+--// ============================================================
+--//  WORLD → SCREEN helpers
+--// ============================================================
+
+-- Projette un point 3D → 2D écran, retourne (vec2, onScreen)
+local function worldToScreen(pos)
+    local screenPos, onScreen = Camera:WorldToViewportPoint(pos)
+    return Vector2.new(screenPos.X, screenPos.Y), onScreen
+end
+
+-- Bounding box 2D d'un character depuis ses parts
+local function getBoundingBox(char)
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+
+    -- on approxime via la taille du humanoid
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local height = hum and hum.HipHeight * 2 + 0.5 or 5
+
+    local top    = hrp.Position + Vector3.new(0, height * 0.5, 0)
+    local bottom = hrp.Position - Vector3.new(0, height * 0.5, 0)
+
+    local topSS,    onT = worldToScreen(top)
+    local bottomSS, onB = worldToScreen(bottom)
+
+    if not onT and not onB then return nil end
+
+    local w = math.abs(topSS.X - bottomSS.X) + 40
+    local h = math.abs(topSS.Y - bottomSS.Y)
+
+    return {
+        top    = topSS,
+        bottom = bottomSS,
+        width  = w,
+        height = h,
+        center = Vector2.new((topSS.X + bottomSS.X) * 0.5,
+                             (topSS.Y + bottomSS.Y) * 0.5),
+    }
+end
+
+--// ============================================================
+--//  ESP RENDER LOOP
+--// ============================================================
+
+RunService.RenderStepped:Connect(function()
+    if not CFG.ESP.Enabled then return end
+
+    local localRoot = LocalPlayer.Character
+        and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+
+        local objs = ESPObjects[player]
+        if not objs then continue end
+
+        local char = player.Character
+        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+
+        local alive = hrp and hum and hum.Health > 0
+
+        if not alive or not localRoot then
+            -- cache tout
+            if objs.BoxLines then
+                for _, l in ipairs(objs.BoxLines) do l.Visible = false end
+            end
+            if objs.NameTag then objs.NameTag.Visible = false end
+            if objs.DistTag then objs.DistTag.Visible = false end
+            if objs.Tracer  then objs.Tracer.Visible  = false end
+            continue
+        end
+
+        local dist = (hrp.Position - localRoot.Position).Magnitude
+        if dist > CFG.ESP.MaxDist then
+            if objs.BoxLines then
+                for _, l in ipairs(objs.BoxLines) do l.Visible = false end
+            end
+            if objs.NameTag then objs.NameTag.Visible = false end
+            if objs.DistTag then objs.DistTag.Visible = false end
+            if objs.Tracer  then objs.Tracer.Visible  = false end
+            continue
+        end
+
+        local bb = getBoundingBox(char)
+        if not bb then continue end
+
+        local x  = bb.center.X - bb.width  * 0.5
+        local y  = bb.top.Y
+        local w  = bb.width
+        local h  = bb.height
+
+        -- Dessine les 4 côtés de la box
+        if objs.BoxLines then
+            -- Top
+            objs.BoxLines[1].From    = Vector2.new(x,     y)
+            objs.BoxLines[1].To      = Vector2.new(x + w, y)
+            objs.BoxLines[1].Visible = true
+            -- Bottom
+            objs.BoxLines[2].From    = Vector2.new(x,     y + h)
+            objs.BoxLines[2].To      = Vector2.new(x + w, y + h)
+            objs.BoxLines[2].Visible = true
+            -- Left
+            objs.BoxLines[3].From    = Vector2.new(x, y)
+            objs.BoxLines[3].To      = Vector2.new(x, y + h)
+            objs.BoxLines[3].Visible = true
+            -- Right
+            objs.BoxLines[4].From    = Vector2.new(x + w, y)
+            objs.BoxLines[4].To      = Vector2.new(x + w, y + h)
+            objs.BoxLines[4].Visible = true
+        end
+
+        -- Name tag
+        if objs.NameTag then
+            objs.NameTag.Text     = player.DisplayName
+            objs.NameTag.Position = Vector2.new(bb.center.X, y - 16)
+            objs.NameTag.Visible  = true
+        end
+
+        -- Distance tag
+        if objs.DistTag then
+            objs.DistTag.Text     = string.format("[%.0fm]", dist)
+            objs.DistTag.Position = Vector2.new(bb.center.X, y + h + 4)
+            objs.DistTag.Visible  = true
+        end
+
+        -- Tracer (bas d'écran → centre du joueur)
+        if objs.Tracer then
+            local vp = Camera.ViewportSize
+            objs.Tracer.From    = Vector2.new(vp.X * 0.5, vp.Y)
+            objs.Tracer.To      = bb.center
+            objs.Tracer.Visible = true
+        end
+    end
+end)
+
+--// ============================================================
+--//  SILENT AIM
+--// ============================================================
+
+-- *ce hook fait croire au moteur que ta souris vise déjà la tête*
+-- on wrap WorldToViewportPoint pour rediriger la projection
+-- (compatible UNC hookfunction)
+
+local function getClosestPlayerToMouse()
+    local mousePos = UserInputService:GetMouseLocation()
+    local closest  = nil
+    local bestDist = CFG.AIM.FOV
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        if CFG.AIM.TeamCheck and player.Team == LocalPlayer.Team then continue end
+
+        local char = player.Character
+        local bone = char and char:FindFirstChild(CFG.AIM.Bone)
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if not bone or not hum or hum.Health <= 0 then continue end
+
+        local screenPos, onScreen = Camera:WorldToViewportPoint(bone.Position)
+        if not onScreen then continue end
+
+        local sp   = Vector2.new(screenPos.X, screenPos.Y)
+        local dist = (sp - mousePos).Magnitude
+
+        if dist < bestDist then
+            bestDist = dist
+            closest  = bone
+        end
+    end
+
+    return closest
+end
+
+-- Hook sur Camera:WorldToViewportPoint via getrawmetamethod + hookfunction
+if hookfunction and getrawmetamethod then
+    local origWTV = getrawmetamethod(Camera, "__namecall")
+
+    hookfunction(origWTV, function(self, ...)
+        local method = getnamecallmethod()
+        if method == "WorldToViewportPoint" and CFG.AIM.Enabled then
+            local target = getClosestPlayerToMouse()
+            if target then
+                return origWTV(self, target.Position)
+            end
+        end
+        return origWTV(self, ...)
+    end)
+end
+
+--// ============================================================
+--//  SPEED HACK
+--// ============================================================
+
+RunService.Heartbeat:Connect(function()
+    if not CFG.MOVEMENT.SpeedEnabled then return end
+    local char = LocalPlayer.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        -- on patch WalkSpeed chaque heartbeat pour contrer les resets serveur
+        hum.WalkSpeed = 16 * CFG.MOVEMENT.SpeedMultiplier
+    end
+end)
+
+--// ============================================================
+--//  INFINITE JUMP
+--// ============================================================
+
+UserInputService.JumpRequest:Connect(function()
+    if not CFG.MOVEMENT.InfJump then return end
+    local char = LocalPlayer.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+--// ============================================================
+--//  PLAYER TRACKING — auto-add / remove
+--// ============================================================
+
+for _, player in ipairs(Players:GetPlayers()) do
+    createESPForPlayer(player)
+end
+
+Players.PlayerAdded:Connect(createESPForPlayer)
+Players.PlayerRemoving:Connect(removeESP)
+
+print("[Rivals Cheat] Loaded — ESP | SilentAim | Speed | InfJump ✌️")
