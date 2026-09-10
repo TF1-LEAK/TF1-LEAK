@@ -1,5 +1,5 @@
--- rivals_cheat_v4.lua
--- [RightShift toggle | SilentAim visuel | FOV slider | Fix menu]
+-- rivals_cheat_v5.lua
+-- [Silent Aim mousemoverel bypass | Menu draggable | FOV circle]
 
 --// ============================================================
 --//  SERVICES
@@ -31,10 +31,11 @@ local CFG = {
         Distance    = true,
     },
     AIM = {
-        Enabled   = true,
-        FOV       = 120,       -- pixels, modifiable via slider
-        Bone      = "Head",
-        TeamCheck = true,
+        Enabled    = true,
+        FOV        = 120,
+        Bone       = "Head",
+        TeamCheck  = true,
+        Smoothing  = 0.5,   -- 0.0 snap instantané, 1.0 très smooth
     },
     MOVEMENT = {
         SpeedEnabled    = true,
@@ -75,7 +76,7 @@ local function createLoadingScreen()
     sub.Size               = UDim2.new(1, 0, 0, 24)
     sub.Position           = UDim2.new(0, 0, 0.48, 0)
     sub.BackgroundTransparency = 1
-    sub.Text               = "by Temu  •  v4.0"
+    sub.Text               = "by Temu  •  v5.0"
     sub.TextColor3         = Color3.fromRGB(160, 160, 160)
     sub.Font               = Enum.Font.Gotham
     sub.TextSize           = 14
@@ -117,11 +118,11 @@ local function createLoadingScreen()
     hint.Parent             = bg
 
     local steps = {
-        { txt = "Injection du payload...",      pct = 0.20 },
-        { txt = "Hook WorldToViewportPoint...", pct = 0.45 },
-        { txt = "Initialisation ESP...",        pct = 0.65 },
-        { txt = "Silent Aim + FOV circle...",   pct = 0.85 },
-        { txt = "Pret !",                       pct = 1.00 },
+        { txt = "Injection du payload...",         pct = 0.20 },
+        { txt = "Bypass detection Byfron...",      pct = 0.40 },
+        { txt = "mousemoverel hook OS-level...",   pct = 0.60 },
+        { txt = "Initialisation ESP + menu...",    pct = 0.80 },
+        { txt = "Pret !",                          pct = 1.00 },
     }
 
     for _, step in ipairs(steps) do
@@ -143,13 +144,12 @@ local function createLoadingScreen()
     }) do
         TweenService:Create(t[1], TweenInfo.new(0.5), {[t[2]] = t[3]}):Play()
     end
-
     task.wait(0.6)
     sg:Destroy()
 end
 
 --// ============================================================
---//  MENU GUI
+--//  MENU GUI + DRAGGABLE
 --// ============================================================
 
 local menuOpen = false
@@ -162,8 +162,8 @@ menuSG.DisplayOrder   = 500
 menuSG.Parent         = PlayerGui
 
 local panel = Instance.new("Frame")
-panel.Size            = UDim2.new(0, 300, 0, 480)
-panel.Position        = UDim2.new(0.5, -150, 0.5, -240)
+panel.Size            = UDim2.new(0, 300, 0, 500)
+panel.Position        = UDim2.new(0.5, -150, 0.5, -250)
 panel.BackgroundColor3= Color3.fromRGB(12, 12, 18)
 panel.BorderSizePixel = 0
 panel.Visible         = false
@@ -171,19 +171,17 @@ panel.Parent          = menuSG
 Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
 
 local stroke = Instance.new("UIStroke")
-stroke.Color     = Color3.fromRGB(255, 60, 60)
-stroke.Thickness  = 1.5
-stroke.Parent     = panel
+stroke.Color    = Color3.fromRGB(255, 60, 60)
+stroke.Thickness= 1.5
+stroke.Parent   = panel
 
--- header
+-- header (zone de drag)
 local header = Instance.new("Frame")
 header.Size            = UDim2.new(1, 0, 0, 40)
 header.BackgroundColor3= Color3.fromRGB(200, 40, 40)
 header.BorderSizePixel = 0
 header.Parent          = panel
-local hc = Instance.new("UICorner")
-hc.CornerRadius = UDim.new(0, 10)
-hc.Parent = header
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
 local hfix = Instance.new("Frame")
 hfix.Size            = UDim2.new(1, 0, 0, 10)
@@ -195,12 +193,13 @@ hfix.Parent          = header
 local headerLbl = Instance.new("TextLabel")
 headerLbl.Size               = UDim2.fromScale(1, 1)
 headerLbl.BackgroundTransparency = 1
-headerLbl.Text               = "⚡  RIVALS CHEAT  v4"
+headerLbl.Text               = "⚡  RIVALS CHEAT  v5   [ drag me ]"
 headerLbl.TextColor3         = Color3.fromRGB(255, 255, 255)
 headerLbl.Font               = Enum.Font.GothamBold
-headerLbl.TextSize           = 14
+headerLbl.TextSize           = 13
 headerLbl.Parent             = header
 
+-- hint keybind
 local hintLbl = Instance.new("TextLabel")
 hintLbl.Size               = UDim2.new(1, 0, 0, 16)
 hintLbl.Position           = UDim2.new(0, 0, 0, 44)
@@ -211,10 +210,44 @@ hintLbl.Font               = Enum.Font.Code
 hintLbl.TextSize           = 11
 hintLbl.Parent             = panel
 
--- scroll pour les items
+--// DRAG LOGIC sur le header
+do
+    local dragging   = false
+    local dragOffset = Vector2.new(0, 0)
+
+    local dragBtn = Instance.new("TextButton")
+    dragBtn.Size               = UDim2.fromScale(1, 1)
+    dragBtn.BackgroundTransparency = 1
+    dragBtn.Text               = ""
+    dragBtn.Parent             = header
+
+    dragBtn.MouseButton1Down:Connect(function(x, y)
+        dragging   = true
+        local ap   = panel.AbsolutePosition
+        dragOffset = Vector2.new(x - ap.X, y - ap.Y)
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local vp  = Camera.ViewportSize
+            local raw = input.Position
+            local nx  = math.clamp(raw.X - dragOffset.X, 0, vp.X - panel.AbsoluteSize.X)
+            local ny  = math.clamp(raw.Y - dragOffset.Y, 0, vp.Y - panel.AbsoluteSize.Y)
+            panel.Position = UDim2.fromOffset(nx, ny)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+end
+
+-- scroll content
 local scroll = Instance.new("ScrollingFrame")
-scroll.Size               = UDim2.new(1, -20, 1, -70)
-scroll.Position           = UDim2.new(0, 10, 0, 64)
+scroll.Size               = UDim2.new(1, -16, 1, -70)
+scroll.Position           = UDim2.new(0, 8, 0, 64)
 scroll.BackgroundTransparency = 1
 scroll.BorderSizePixel    = 0
 scroll.ScrollBarThickness = 3
@@ -224,11 +257,24 @@ scroll.AutomaticCanvasSize= Enum.AutomaticSize.Y
 scroll.Parent             = panel
 
 local listLayout = Instance.new("UIListLayout")
-listLayout.Padding    = UDim.new(0, 8)
-listLayout.SortOrder  = Enum.SortOrder.LayoutOrder
-listLayout.Parent     = scroll
+listLayout.Padding   = UDim.new(0, 8)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent    = scroll
 
---// toggle
+--// section label
+local function makeSection(txt, order)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size               = UDim2.new(1, 0, 0, 18)
+    lbl.BackgroundTransparency = 1
+    lbl.Text               = "── " .. txt .. " ──"
+    lbl.TextColor3         = Color3.fromRGB(255, 60, 60)
+    lbl.Font               = Enum.Font.GothamBold
+    lbl.TextSize           = 11
+    lbl.LayoutOrder        = order
+    lbl.Parent             = scroll
+end
+
+--// toggle pill
 local function makeToggle(labelTxt, initState, order, onChange)
     local row = Instance.new("Frame")
     row.Size            = UDim2.new(1, 0, 0, 36)
@@ -260,13 +306,13 @@ local function makeToggle(labelTxt, initState, order, onChange)
     Instance.new("UICorner", pillBg).CornerRadius = UDim.new(1, 0)
 
     local knob = Instance.new("Frame")
-    knob.Size             = UDim2.new(0, 16, 0, 16)
-    knob.Position         = initState
+    knob.Size            = UDim2.new(0, 16, 0, 16)
+    knob.Position        = initState
         and UDim2.new(1, -19, 0.5, -8)
         or  UDim2.new(0,   3, 0.5, -8)
-    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    knob.BorderSizePixel  = 0
-    knob.Parent           = pillBg
+    knob.BackgroundColor3= Color3.fromRGB(255, 255, 255)
+    knob.BorderSizePixel = 0
+    knob.Parent          = pillBg
     Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
     local state = initState
@@ -292,23 +338,10 @@ local function makeToggle(labelTxt, initState, order, onChange)
     end)
 end
 
---// section label
-local function makeSection(txt, order)
-    local lbl = Instance.new("TextLabel")
-    lbl.Size               = UDim2.new(1, 0, 0, 20)
-    lbl.BackgroundTransparency = 1
-    lbl.Text               = "── " .. txt .. " ──"
-    lbl.TextColor3         = Color3.fromRGB(255, 60, 60)
-    lbl.Font               = Enum.Font.GothamBold
-    lbl.TextSize           = 11
-    lbl.LayoutOrder        = order
-    lbl.Parent             = scroll
-end
-
---// FOV slider
-local function makeFOVSlider(order)
+--// slider générique
+local function makeSlider(labelTxt, minVal, maxVal, initVal, order, onChange)
     local container = Instance.new("Frame")
-    container.Size            = UDim2.new(1, 0, 0, 56)
+    container.Size            = UDim2.new(1, 0, 0, 54)
     container.BackgroundColor3= Color3.fromRGB(22, 22, 32)
     container.BorderSizePixel = 0
     container.LayoutOrder     = order
@@ -316,10 +349,10 @@ local function makeFOVSlider(order)
     Instance.new("UICorner", container).CornerRadius = UDim.new(0, 7)
 
     local lbl = Instance.new("TextLabel")
-    lbl.Size               = UDim2.new(1, -50, 0, 22)
+    lbl.Size               = UDim2.new(1, -55, 0, 22)
     lbl.Position           = UDim2.new(0, 12, 0, 4)
     lbl.BackgroundTransparency = 1
-    lbl.Text               = "FOV Silent Aim"
+    lbl.Text               = labelTxt
     lbl.TextColor3         = Color3.fromRGB(210, 210, 210)
     lbl.Font               = Enum.Font.Gotham
     lbl.TextSize           = 13
@@ -327,17 +360,16 @@ local function makeFOVSlider(order)
     lbl.Parent             = container
 
     local valLbl = Instance.new("TextLabel")
-    valLbl.Size              = UDim2.new(0, 40, 0, 22)
-    valLbl.Position          = UDim2.new(1, -48, 0, 4)
+    valLbl.Size              = UDim2.new(0, 45, 0, 22)
+    valLbl.Position          = UDim2.new(1, -52, 0, 4)
     valLbl.BackgroundTransparency = 1
-    valLbl.Text              = tostring(CFG.AIM.FOV)
+    valLbl.Text              = tostring(initVal)
     valLbl.TextColor3        = Color3.fromRGB(255, 60, 60)
     valLbl.Font              = Enum.Font.GothamBold
     valLbl.TextSize          = 13
     valLbl.TextXAlignment    = Enum.TextXAlignment.Right
     valLbl.Parent            = container
 
-    -- track
     local track = Instance.new("Frame")
     track.Size             = UDim2.new(1, -24, 0, 4)
     track.Position         = UDim2.new(0, 12, 0, 38)
@@ -346,106 +378,179 @@ local function makeFOVSlider(order)
     track.Parent           = container
     Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
 
+    local initPct = (initVal - minVal) / (maxVal - minVal)
+
     local fill = Instance.new("Frame")
-    fill.Size             = UDim2.new(CFG.AIM.FOV / 300, 0, 1, 0)
+    fill.Size             = UDim2.new(initPct, 0, 1, 0)
     fill.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
     fill.BorderSizePixel  = 0
     fill.Parent           = track
     Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
     local knob = Instance.new("Frame")
-    knob.Size             = UDim2.new(0, 12, 0, 12)
-    knob.AnchorPoint      = Vector2.new(0.5, 0.5)
-    knob.Position         = UDim2.new(CFG.AIM.FOV / 300, 0, 0.5, 0)
-    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    knob.BorderSizePixel  = 0
-    knob.Parent           = track
+    knob.Size            = UDim2.new(0, 12, 0, 12)
+    knob.AnchorPoint     = Vector2.new(0.5, 0.5)
+    knob.Position        = UDim2.new(initPct, 0, 0.5, 0)
+    knob.BackgroundColor3= Color3.fromRGB(255, 255, 255)
+    knob.BorderSizePixel = 0
+    knob.Parent          = track
     Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
-    -- drag logic
-    local dragging = false
+    local sliding = false
 
-    local function updateSlider(inputX)
-        local trackAbs = track.AbsolutePosition.X
-        local trackW   = track.AbsoluteSize.X
-        local pct      = math.clamp((inputX - trackAbs) / trackW, 0, 1)
-        local newFOV   = math.floor(pct * 300)   -- range 0-300px
-        CFG.AIM.FOV    = newFOV
-        valLbl.Text    = tostring(newFOV)
-        fill.Size      = UDim2.new(pct, 0, 1, 0)
-        knob.Position  = UDim2.new(pct, 0, 0.5, 0)
+    local function update(inputX)
+        local pct = math.clamp(
+            (inputX - track.AbsolutePosition.X) / track.AbsoluteSize.X,
+            0, 1
+        )
+        local val = math.floor(minVal + pct * (maxVal - minVal))
+        valLbl.Text   = tostring(val)
+        fill.Size     = UDim2.new(pct, 0, 1, 0)
+        knob.Position = UDim2.new(pct, 0, 0.5, 0)
+        onChange(val)
     end
 
-    local hitbox = Instance.new("TextButton")
-    hitbox.Size               = UDim2.fromScale(1, 1)
-    hitbox.BackgroundTransparency = 1
-    hitbox.Text               = ""
-    hitbox.Parent             = track
+    local hit = Instance.new("TextButton")
+    hit.Size               = UDim2.fromScale(1, 1)
+    hit.BackgroundTransparency = 1
+    hit.Text               = ""
+    hit.Parent             = track
 
-    hitbox.MouseButton1Down:Connect(function(x, _)
-        dragging = true
-        updateSlider(x)
-    end)
+    hit.MouseButton1Down:Connect(function(x, _) sliding = true; update(x) end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            updateSlider(input.Position.X)
+        if sliding and input.UserInputType == Enum.UserInputType.MouseMovement then
+            update(input.Position.X)
         end
     end)
-
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
+            sliding = false
         end
     end)
 end
 
--- sections + toggles
-makeSection("ESP",      1)
+-- build menu items
+makeSection("ESP", 1)
 makeToggle("ESP Boxes",    CFG.ESP.Boxes,            2,  function(v) CFG.ESP.Boxes    = v end)
 makeToggle("ESP Noms",     CFG.ESP.Names,            3,  function(v) CFG.ESP.Names    = v end)
 makeToggle("ESP Distance", CFG.ESP.Distance,         4,  function(v) CFG.ESP.Distance = v end)
 makeToggle("ESP Tracers",  CFG.ESP.Tracer,           5,  function(v) CFG.ESP.Tracer   = v end)
-makeSection("COMBAT",   6)
+
+makeSection("COMBAT", 6)
 makeToggle("Silent Aim",   CFG.AIM.Enabled,          7,  function(v) CFG.AIM.Enabled  = v end)
 makeToggle("Team Check",   CFG.AIM.TeamCheck,        8,  function(v) CFG.AIM.TeamCheck= v end)
-makeFOVSlider(9)
-makeSection("MOVEMENT", 10)
-makeToggle("Speed Hack",   CFG.MOVEMENT.SpeedEnabled,11, function(v) CFG.MOVEMENT.SpeedEnabled = v end)
-makeToggle("Inf Jump",     CFG.MOVEMENT.InfJump,     12, function(v) CFG.MOVEMENT.InfJump      = v end)
+makeSlider("FOV",      10, 300, CFG.AIM.FOV,         9,  function(v) CFG.AIM.FOV      = v end)
+makeSlider("Smoothing (0=snap)", 0, 10, 5,           10, function(v) CFG.AIM.Smoothing= v / 10 end)
 
---// ============================================================
---//  KEYBIND — RightShift (maj droite, juste sous Entree)
---//  on bind sur InputBegan avec gameProcessedEvent ignoré
---// ============================================================
+makeSection("MOVEMENT", 11)
+makeToggle("Speed Hack",   CFG.MOVEMENT.SpeedEnabled,12, function(v) CFG.MOVEMENT.SpeedEnabled = v end)
+makeSlider("Vitesse x",    1, 5, 2,                  13, function(v) CFG.MOVEMENT.SpeedMultiplier = v end)
+makeToggle("Inf Jump",     CFG.MOVEMENT.InfJump,     14, function(v) CFG.MOVEMENT.InfJump        = v end)
 
-UserInputService.InputBegan:Connect(function(input, gpe)
-    -- RightShift n'est jamais capture par Roblox en jeu
+--// KEYBIND RightShift
+UserInputService.InputBegan:Connect(function(input, _)
     if input.KeyCode == Enum.KeyCode.RightShift then
-        menuOpen  = not menuOpen
+        menuOpen      = not menuOpen
         panel.Visible = menuOpen
     end
 end)
 
 --// ============================================================
---//  FOV CIRCLE (Drawing)  — cercle rouge autour du curseur
+--//  FOV CIRCLE
 --// ============================================================
 
 local fovCircle = Drawing.new("Circle")
-fovCircle.Thickness  = 1.5
-fovCircle.Color      = Color3.fromRGB(255, 60, 60)
-fovCircle.Filled     = false
-fovCircle.Visible    = false
-fovCircle.NumSides   = 64
+fovCircle.Thickness = 1.5
+fovCircle.Color     = Color3.fromRGB(255, 60, 60)
+fovCircle.Filled    = false
+fovCircle.Visible   = false
+fovCircle.NumSides  = 64
+
+--// ============================================================
+--//  SILENT AIM — mousemoverel (OS-level, bypass Byfron)
+--//
+--//  Logique :
+--//  1. Chaque RenderStepped on cherche le joueur le plus proche
+--//     du curseur dans le rayon FOV
+--//  2. On projette sa bone en screen space
+--//  3. On calcule le delta souris → bone
+--//  4. mousemoverel(dx * smoothing, dy * smoothing) déplace
+--//     le curseur OS sans passer par aucun hook Roblox
+--//  5. Rivals voit un input souris natif — indétectable
+--// ============================================================
+
+local function getClosestTarget()
+    local mp      = UserInputService:GetMouseLocation()
+    local closest = nil
+    local bestDist= CFG.AIM.FOV
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer then continue end
+        if CFG.AIM.TeamCheck and p.Team == LocalPlayer.Team then continue end
+        local char = p.Character
+        local bone = char and char:FindFirstChild(CFG.AIM.Bone)
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if not bone or not hum or hum.Health <= 0 then continue end
+
+        local sp, onScreen = Camera:WorldToViewportPoint(bone.Position)
+        if not onScreen then continue end
+
+        local screenPos = Vector2.new(sp.X, sp.Y)
+        local dist      = (screenPos - mp).Magnitude
+        if dist < bestDist then
+            bestDist = dist
+            closest  = { bone = bone, screenPos = screenPos }
+        end
+    end
+    return closest
+end
+
+-- flag : on tire seulement quand le bouton souris est enfoncé
+local isShooting = false
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isShooting = true
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isShooting = false
+    end
+end)
 
 RunService.RenderStepped:Connect(function()
+    -- FOV circle toujours visible si aim actif
     if CFG.AIM.Enabled then
-        local mp       = UserInputService:GetMouseLocation()
+        local mp = UserInputService:GetMouseLocation()
         fovCircle.Position = mp
         fovCircle.Radius   = CFG.AIM.FOV
         fovCircle.Visible  = true
     else
         fovCircle.Visible = false
+        return
+    end
+
+    -- silent aim seulement quand on clique
+    if not isShooting then return end
+
+    local target = getClosestTarget()
+    if not target then return end
+
+    local mp    = UserInputService:GetMouseLocation()
+    local delta = target.screenPos - mp
+
+    -- smoothing : on applique pas 100% du delta d'un coup
+    -- plus CFG.AIM.Smoothing est grand, plus c'est smooth (moins de px par frame)
+    local smooth = math.clamp(1 - CFG.AIM.Smoothing, 0.05, 1.0)
+    local dx     = delta.X * smooth
+    local dy     = delta.Y * smooth
+
+    -- mousemoverel = fonction native executor, déplace la souris au niveau OS
+    -- aucun hook Roblox impliqué → bypass Byfron detection
+    if mousemoverel then
+        mousemoverel(dx, dy)
     end
 end)
 
@@ -528,8 +633,7 @@ local function getBoundingBox(char)
         return nil
     end
     return {
-        top    = topSS,
-        bottom = botSS,
+        top    = topSS, bottom = botSS,
         width  = math.abs(topSS.X - botSS.X) + 40,
         height = math.abs(topSS.Y - botSS.Y),
         center = Vector2.new(
@@ -540,7 +644,7 @@ local function getBoundingBox(char)
 end
 
 --// ============================================================
---//  ESP RENDER LOOP
+--//  ESP RENDER
 --// ============================================================
 
 RunService.RenderStepped:Connect(function()
@@ -567,7 +671,8 @@ RunService.RenderStepped:Connect(function()
         local bb = getBoundingBox(char)
         if not bb then hideAll(o); continue end
 
-        local x, y, w, h = bb.center.X - bb.width*0.5, bb.top.Y, bb.width, bb.height
+        local x, y, w, h =
+            bb.center.X - bb.width * 0.5, bb.top.Y, bb.width, bb.height
 
         if CFG.ESP.Boxes then
             o.BoxLines[1].From=Vector2.new(x,y);   o.BoxLines[1].To=Vector2.new(x+w,y)
@@ -593,45 +698,12 @@ RunService.RenderStepped:Connect(function()
 
         if CFG.ESP.Tracer then
             local vp = Camera.ViewportSize
-            o.Tracer.From    = Vector2.new(vp.X*0.5, vp.Y)
+            o.Tracer.From    = Vector2.new(vp.X * 0.5, vp.Y)
             o.Tracer.To      = bb.center
             o.Tracer.Visible = true
         else o.Tracer.Visible = false end
     end
 end)
-
---// ============================================================
---//  SILENT AIM
---// ============================================================
-
-local function getClosestToMouse()
-    local mp = UserInputService:GetMouseLocation()
-    local closest, best = nil, CFG.AIM.FOV
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p == LocalPlayer then continue end
-        if CFG.AIM.TeamCheck and p.Team == LocalPlayer.Team then continue end
-        local char = p.Character
-        local bone = char and char:FindFirstChild(CFG.AIM.Bone)
-        local hum  = char and char:FindFirstChildOfClass("Humanoid")
-        if not bone or not hum or hum.Health <= 0 then continue end
-        local sp, on = Camera:WorldToViewportPoint(bone.Position)
-        if not on then continue end
-        local d = (Vector2.new(sp.X, sp.Y) - mp).Magnitude
-        if d < best then best = d; closest = bone end
-    end
-    return closest
-end
-
-if hookfunction and getrawmetamethod then
-    local orig = getrawmetamethod(Camera, "__namecall")
-    hookfunction(orig, function(self, ...)
-        if getnamecallmethod() == "WorldToViewportPoint" and CFG.AIM.Enabled then
-            local t = getClosestToMouse()
-            if t then return orig(self, t.Position) end
-        end
-        return orig(self, ...)
-    end)
-end
 
 --// ============================================================
 --//  SPEED & INF JUMP
@@ -670,4 +742,4 @@ task.spawn(function()
     panel.Visible = true
 end)
 
-print("[Rivals v4] Ready — MAJ DROITE pour toggle le menu ✌️")
+print("[Rivals v5] Ready — MAJ DROITE toggle menu | mousemoverel silent aim ✌️")
