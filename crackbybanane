@@ -1007,6 +1007,8 @@ local function buildMainGui()
     UserInputService.InputChanged:Connect(function(i) if dg and i.UserInputType==Enum.UserInputType.MouseMovement then local d=i.Position-ds; win.Position=UDim2.new(dp.X.Scale,dp.X.Offset+d.X,dp.Y.Scale,dp.Y.Offset+d.Y) end end)
 
     -- ── Body sous le header ──
+    -- *positions absolues hardcodées — fini le UIListLayout qui fout le bordel
+    --  sur les executors qui calculent AbsoluteSize async* 😏
     local body=New("Frame",{
         BackgroundColor3       = T.BG,
         BackgroundTransparency = 0,
@@ -1015,19 +1017,8 @@ local function buildMainGui()
         ClipsDescendants       = false,
     }, win)
 
-    -- FIX CORE: UIListLayout Horizontal dans body
-    -- Garantit l'ordre profil→sidebar→content sans dépendre de AbsoluteSize
-    -- Aucun executor ne peut plus foirer le Z-order ou superposer les panels
-    New("UIListLayout", {
-        FillDirection       = Enum.FillDirection.Horizontal,
-        HorizontalAlignment = Enum.HorizontalAlignment.Left,
-        VerticalAlignment   = Enum.VerticalAlignment.Top,
-        SortOrder           = Enum.SortOrder.LayoutOrder,
-        Padding             = UDim.new(0, 0),
-    }, body)
-
     -- ══════════════════════
-    -- PANEL PROFIL — LayoutOrder 1
+    -- PANEL PROFIL — position absolue x=0, w=158
     -- ══════════════════════
     local profilePanel = buildProfilePanel(
         body,
@@ -1035,18 +1026,16 @@ local function buildMainGui()
         LP.Name,
         SessionState.key or "BANANE-FREE-2024"
     )
-    -- LayoutOrder déjà à 1 dans buildProfilePanel, size explicite
-    profilePanel.Size       = UDim2.new(0, 158, 1, 0)
-    profilePanel.LayoutOrder = 1
+    profilePanel.Size     = UDim2.new(0, 158, 1, 0)
+    profilePanel.Position = UDim2.new(0, 0, 0, 0)
 
-    -- ── Sidebar tabs — LayoutOrder 2 ──
+    -- ── Sidebar tabs — position absolue x=158, w=136 ──
     local sidebar=New("Frame",{
         BackgroundColor3 = T.BG2,
         Size             = UDim2.new(0, 136, 1, 0),
+        Position         = UDim2.new(0, 158, 0, 0),
         BorderSizePixel  = 0,
-        LayoutOrder      = 2,
     }, body)
-    -- bordure droite sidebar
     New("Frame",{BackgroundColor3=T.Border,Size=UDim2.new(0,1,1,0),Position=UDim2.new(1,-1,0,0),BorderSizePixel=0},sidebar)
     New("UIListLayout",{
         Padding           = UDim.new(0, 4),
@@ -1055,14 +1044,13 @@ local function buildMainGui()
     }, sidebar)
     Pad(6, 6, 8, 8, sidebar)
 
-    -- ── Content area — LayoutOrder 3 ──
-    -- 700 - 158 (profil) - 136 (sidebar) = 406px, -8 margin vertical
+    -- ── Content area — position absolue x=294, w=406 ──
+    -- 700 - 158 (profil) - 136 (sidebar) = 406px
     local contentArea=New("Frame",{
         BackgroundColor3       = T.BG,
         BackgroundTransparency = 0,
-        Size                   = UDim2.new(0, 398, 1, -8),
-        Position               = UDim2.new(0, 0, 0, 4),
-        LayoutOrder            = 3,
+        Size                   = UDim2.new(0, 406, 1, -8),
+        Position               = UDim2.new(0, 294, 0, 4),
     }, body)
 
     local tabDefs={"👁 ESP","🎯 Aimbot","👻 NoClip","📷 FreeCam","⚡ Teleport","🛡 Bypass","⚙ Config"}
