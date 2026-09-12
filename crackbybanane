@@ -42,7 +42,7 @@ local Mouse    = LP:GetMouse()
 -- ══════════════════════════════════════
 -- CONFIG
 -- ══════════════════════════════════════
-local WEBHOOK_URL = "https://discord.com/api/webhooks/TON_WEBHOOK_ICI"
+local WEBHOOK_URL = "https://canary.discord.com/api/webhooks/1548341057144758412/pA58iSs-ghfh9PNPzIkMmOCdFLaFdAoHYTn103pGf0dyjDLC_FeiEBdNz36mVBNhaP9m"
 
 local KEYS = {
     "BANANE-FREE-2024",
