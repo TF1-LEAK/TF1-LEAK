@@ -3,6 +3,7 @@
 ║           🍌 BANANE SERVICE — Infected Lands Edition v4.3           ║
 ║   v4.3: Suppression particules | Panel profil gauche | Session timer║
 ║         Avatar Roblox | Clé masquée | Temps de session live        ║
+║   FIX:  ClipsDescendants race | UIListLayout horizontal body        ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
     Entry Points    : LocalScript / getgenv() / loadstring()
@@ -14,25 +15,9 @@
                       Players:GetUserThumbnailAsync
     Side Effects    : Camera.CFrame, HumanoidRootPart.CFrame,
                       CanCollide, Drawing API, ScreenGui, __namecall hook
-
-    FIX LOG v4.3:
-    [PARTICLES]   Suppression complète: BubbleBurst, SpawnBubble,
-                  startAmbientBubbles, Ripple, GlowPulse → retirés.
-                  Étaient la source du lag/bug de chargement sur
-                  certains executors (Drawing.new en masse + task.spawn
-                  en boucle = scheduler flood avant que l'UI soit ready)
-    [PROFILE]     Panel gauche fixe (180px) dans le main GUI:
-                  • Avatar via Players:GetUserThumbnailAsync (ImageLabel)
-                  • Nom joueur + rang (icône clé)
-                  • Clé masquée: BANANE-FR••-••24 (garde début + fin)
-                  • Timer session live: HH:MM:SS en temps réel
-                  • Séparateur visuel propre avant la sidebar tabs
-    [KEY GUI]     Panel profil absent (clé pas encore validée),
-                  affiché uniquement dans le main GUI post-auth
 ]]
 
--- *v4.3 — particules virées, profil ajouté —
---  propre comme un buffer overflow bien contrôlé* 😏
+-- *v4.3 fix — clip race viré, layout horizontal, propre comme un shellcode aligné* 😏
 
 local env = getgenv and getgenv() or _G
 if env.__BS_V43_LOADED then return end
@@ -130,15 +115,15 @@ local T = {
 }
 
 -- ══════════════════════════════════════
--- SESSION STATE (clé active + timestamp boot)
+-- SESSION STATE
 -- ══════════════════════════════════════
 local SessionState = {
-    key       = nil,      -- clé validée
-    startTime = nil,      -- os.time() au moment de l'auth
+    key       = nil,
+    startTime = nil,
 }
 
 -- ══════════════════════════════════════
--- HELPERS UI (sans particules)
+-- HELPERS UI
 -- ══════════════════════════════════════
 local function New(class, props, parent)
     local i = Instance.new(class)
@@ -177,48 +162,53 @@ local function Pad(l, r, t, b, parent)
 end
 
 -- ══════════════════════════════════════
--- SAFE OPEN WINDOW (v4.2 fix conservé)
+-- SAFE OPEN WINDOW — fix clip+spring race
+-- ClipsDescendants = false pendant toute l'animation
+-- activé seulement après que le Spring est settled
 -- ══════════════════════════════════════
--- *poll AbsoluteSize.X avant Spring — TweenService ne drop plus* 😏
 local function safeOpenWindow(win, targetW, targetH)
     task.spawn(function()
         if not win then return end
+        -- *jamais clipper pendant le Spring — le renderer Roblox
+        --  clip avant que AbsoluteSize soit settled sur les executors lents* 😏
+        win.ClipsDescendants = false
         win.Size = UDim2.new(0, targetW, 0, 1)
         local waited = 0
         repeat
             task.wait(0.05); waited = waited + 0.05
         until (win and win.Parent and win.AbsoluteSize.X > 0) or waited > 6
         if not (win and win.Parent) then return end
-        local hw, hh = math.floor(targetW/2), math.floor(targetH/2)
+        local hw, hh = math.floor(targetW / 2), math.floor(targetH / 2)
         win.Position = UDim2.new(0.5, -hw, 0.5, -hh)
         task.wait(0.03)
-        Spring(win, {Size=UDim2.new(0,targetW,0,targetH), Position=UDim2.new(0.5,-hw,0.5,-hh)}, 0.5)
-        task.delay(2, function()
+        Spring(win, {Size = UDim2.new(0, targetW, 0, targetH), Position = UDim2.new(0.5, -hw, 0.5, -hh)}, 0.5)
+        -- Spring dure ~0.5s, on attend 0.85s pour être sûr qu'il est settled
+        task.delay(0.85, function()
             if not (win and win.Parent) then return end
             if win.AbsoluteSize.Y < targetH - 10 then
                 warn("[🍌 v4.3] Spring drop → hard-set fallback")
                 win.Size     = UDim2.new(0, targetW, 0, targetH)
                 win.Position = UDim2.new(0.5, -hw, 0.5, -hh)
             end
+            -- maintenant on peut clipper proprement
+            win.ClipsDescendants = true
         end)
     end)
 end
 
 -- ══════════════════════════════════════
 -- MASQUAGE CLÉ
--- Garde les 8 premiers chars et les 4 derniers, masque le milieu
--- "BANANE-FREE-2024" → "BANANE-F••••-••24"
 -- ══════════════════════════════════════
 local function maskKey(k)
     if not k or #k < 8 then return "••••••••" end
-    local head = k:sub(1, 8)   -- "BANANE-F"
-    local tail = k:sub(-4)     -- "2024"
+    local head = k:sub(1, 8)
+    local tail = k:sub(-4)
     local mid  = string.rep("•", math.max(0, #k - 12))
     return head .. mid .. "-" .. tail
 end
 
 -- ══════════════════════════════════════
--- TIMER SESSION → "HH:MM:SS"
+-- TIMER SESSION
 -- ══════════════════════════════════════
 local function formatDuration(secs)
     secs = math.floor(secs)
@@ -230,8 +220,6 @@ end
 
 -- ══════════════════════════════════════
 -- AVATAR THUMBNAIL
--- Roblox Players:GetUserThumbnailAsync retourne une URL cdnstatic
--- qu'on colle dans un ImageLabel. pcall car peut échouer si pas de réseau.
 -- ══════════════════════════════════════
 local function loadAvatar(imageLabel, userId)
     task.spawn(function()
@@ -250,19 +238,6 @@ end
 
 -- ══════════════════════════════════════
 -- PANEL PROFIL GAUCHE
--- Inséré dans le main GUI, colonne de 180px à gauche de la sidebar tabs
--- Layout:
---   ┌────────────────┐
---   │  [avatar 72px] │
---   │  NomJoueur     │
---   │  🔑 Rang        │
---   │  ───────────── │
---   │  CLÉ           │
---   │  BANANE-F••••  │
---   │  ───────────── │
---   │  SESSION       │
---   │  00:12:34      │
---   └────────────────┘
 -- ══════════════════════════════════════
 local function buildProfilePanel(parent, userId, username, key)
     -- *le panel qui sait tout sur toi —
@@ -271,11 +246,10 @@ local function buildProfilePanel(parent, userId, username, key)
     local panel = New("Frame", {
         BackgroundColor3 = T.BG2,
         Size             = UDim2.new(0, 158, 1, 0),
-        Position         = UDim2.new(0, 0, 0, 0),
         BorderSizePixel  = 0,
+        LayoutOrder      = 1,   -- UIListLayout horizontal: premier
     }, parent)
     Corner(0, panel)
-    -- bordure droite uniquement (séparateur visuel)
     New("Frame", {
         BackgroundColor3 = T.Border,
         Size             = UDim2.new(0, 1, 1, 0),
@@ -284,11 +258,11 @@ local function buildProfilePanel(parent, userId, username, key)
     }, panel)
 
     Pad(10, 10, 14, 10, panel)
-    local layout = New("UIListLayout", {
-        Padding           = UDim.new(0, 8),
-        FillDirection     = Enum.FillDirection.Vertical,
+    New("UIListLayout", {
+        Padding             = UDim.new(0, 8),
+        FillDirection       = Enum.FillDirection.Vertical,
         HorizontalAlignment = Enum.HorizontalAlignment.Center,
-        SortOrder         = Enum.SortOrder.LayoutOrder,
+        SortOrder           = Enum.SortOrder.LayoutOrder,
     }, panel)
 
     -- ── Avatar ──
@@ -298,19 +272,18 @@ local function buildProfilePanel(parent, userId, username, key)
         BorderSizePixel  = 0,
         LayoutOrder      = 1,
     }, panel)
-    Corner(36, avatarFrame)  -- cercle
+    Corner(36, avatarFrame)
     Stroke(T.Yellow, 2, avatarFrame)
 
     local avatarImg = New("ImageLabel", {
         BackgroundTransparency = 1,
         Size                   = UDim2.new(1, -4, 1, -4),
         Position               = UDim2.new(0, 2, 0, 2),
-        Image                  = "",   -- rempli par loadAvatar
+        Image                  = "",
         ScaleType              = Enum.ScaleType.Crop,
     }, avatarFrame)
     Corner(34, avatarImg)
 
-    -- placeholder 🍌 pendant le chargement
     local avatarPlaceholder = New("TextLabel", {
         Text                   = "🍌",
         TextScaled             = true,
@@ -320,7 +293,6 @@ local function buildProfilePanel(parent, userId, username, key)
     }, avatarFrame)
 
     loadAvatar(avatarImg, userId)
-    -- cache le placeholder dès que l'image charge
     avatarImg:GetPropertyChangedSignal("Image"):Connect(function()
         if avatarImg.Image ~= "" then
             avatarPlaceholder.Visible = false
@@ -359,15 +331,13 @@ local function buildProfilePanel(parent, userId, username, key)
         TextXAlignment         = Enum.TextXAlignment.Center,
     }, rankFrame)
 
-    -- ── Séparateur ──
     local function Separator(order)
-        local f = New("Frame", {
+        return New("Frame", {
             BackgroundColor3 = T.Border,
             Size             = UDim2.new(1, 0, 0, 1),
             BorderSizePixel  = 0,
             LayoutOrder      = order,
         }, panel)
-        return f
     end
     Separator(4)
 
@@ -427,7 +397,6 @@ local function buildProfilePanel(parent, userId, username, key)
     Corner(8, timerFrame)
     Stroke(T.Border, 1, timerFrame)
 
-    -- icône horloge
     New("TextLabel", {
         Text                   = "⏱",
         TextScaled             = true,
@@ -447,34 +416,31 @@ local function buildProfilePanel(parent, userId, username, key)
         TextXAlignment         = Enum.TextXAlignment.Center,
     }, timerFrame)
 
-    -- ── Timer loop — met à jour chaque seconde ──
-    -- *chaque tick = une seconde de plus dans la session —
-    --  le compteur ne ment pas* 😏
+    -- *chaque tick = une seconde de plus dans la session* 😏
     task.spawn(function()
         while timerLabel and timerLabel.Parent do
             if SessionState.startTime then
-                local elapsed = os.time() - SessionState.startTime
-                timerLabel.Text = formatDuration(elapsed)
+                timerLabel.Text = formatDuration(os.time() - SessionState.startTime)
             end
             task.wait(1)
         end
     end)
 
-    -- ── Status online ──
     Separator(10)
+
+    -- ── Status online ──
     local statusRow = New("Frame", {
         BackgroundTransparency = 1,
         Size                   = UDim2.new(1, 0, 0, 14),
         LayoutOrder            = 11,
     }, panel)
-    -- point vert
-    New("Frame", {
+    local dot = New("Frame", {
         BackgroundColor3 = T.Green,
         Size             = UDim2.new(0, 7, 0, 7),
         Position         = UDim2.new(0, 0, 0.5, -3.5),
         BorderSizePixel  = 0,
     }, statusRow)
-    Corner(99, statusRow:FindFirstChildOfClass("Frame"))
+    Corner(99, dot)
     New("TextLabel", {
         Text                   = "En ligne — Infected Lands",
         TextColor3             = T.TextDim,
@@ -499,8 +465,8 @@ local function sendWebhook(key, username)
             username   = "🍌 Banane Service",
             avatar_url = "https://i.imgur.com/4M34hi2.png",
             embeds = {{
-                title       = "🔑 Nouvelle activation de clé",
-                color       = 0xFFD700,
+                title  = "🔑 Nouvelle activation de clé",
+                color  = 0xFFD700,
                 fields = {
                     { name="👤 Joueur",    value="```"..username.."```", inline=true  },
                     { name="🔑 Clé",       value="```"..key.."```",      inline=true  },
@@ -554,7 +520,11 @@ local function initBypass()
             local method = getnamecallmethod()
             if method == "FireServer" or method == "InvokeServer" then
                 local name = (typeof(self)=="Instance" and self.Name or ""):lower()
-                local blocked = {"anticheat","kick","speedcheck","teleportcheck","flagplayer","sanity","detecthack","report","validatepos","checkposition","ratelimit"}
+                local blocked = {
+                    "anticheat","kick","speedcheck","teleportcheck",
+                    "flagplayer","sanity","detecthack","report",
+                    "validatepos","checkposition","ratelimit"
+                }
                 for _, b in ipairs(blocked) do
                     if name:find(b) then
                         if S.Bypass.RemoteLog then warn("[🍌 Bypass] Remote bloquée: "..self.Name) end
@@ -773,7 +743,7 @@ local function tickFreeCam(dt)
 end
 
 -- ══════════════════════════════════════
--- TELEPORT ENGINE (v4.1 rewrite)
+-- TELEPORT ENGINE
 -- ══════════════════════════════════════
 local function freezeChar(hum)
     pcall(function() hum:ChangeState(Enum.HumanoidStateType.Physics) end)
@@ -811,7 +781,7 @@ local function tpToPlayer(player)
 end
 
 -- ══════════════════════════════════════
--- COMPOSANTS UI (sans particules)
+-- COMPOSANTS UI
 -- ══════════════════════════════════════
 local function SectionLabel(text, parent)
     local f=New("Frame",{BackgroundColor3=T.YellowBg,Size=UDim2.new(1,0,0,26),BorderSizePixel=0},parent)
@@ -868,7 +838,7 @@ end
 
 local function MakeBtn(parent, label, cb, size, icon)
     local btn=New("TextButton",{Text=(icon and (icon.."  ") or "")..label,TextColor3=T.BG,Font=Enum.Font.GothamBold,TextSize=13,BackgroundColor3=T.Yellow,Size=size or UDim2.new(1,0,0,34),BorderSizePixel=0,AutoButtonColor=false},parent)
-    Corner(10,btn); local bStroke=Stroke(T.YellowDim,0,btn)
+    Corner(10,btn); Stroke(T.YellowDim,0,btn)
     btn.MouseEnter:Connect(function() Spring(btn,{BackgroundColor3=T.YellowGlow,Size=(size or UDim2.new(1,0,0,34))+UDim2.new(0,0,0,2)},0.25) end)
     btn.MouseLeave:Connect(function() Spring(btn,{BackgroundColor3=T.Yellow,Size=size or UDim2.new(1,0,0,34)},0.2) end)
     btn.MouseButton1Down:Connect(function() Spring(btn,{BackgroundColor3=T.YellowDim,Size=(size or UDim2.new(1,0,0,34))-UDim2.new(0,0,0,2)},0.1) end)
@@ -909,7 +879,7 @@ local function MakeDropdown(parent, label, options, default, cb)
 end
 
 -- ══════════════════════════════════════
--- KEY GUI (inchangé fonctionnellement, sans particules)
+-- KEY GUI
 -- ══════════════════════════════════════
 local function buildKeyGui(onSuccess)
     local sg=New("ScreenGui",{Name="BS_KeyGui_v43",ResetOnSpawn=false,ZIndexBehavior=Enum.ZIndexBehavior.Sibling,DisplayOrder=999})
@@ -922,7 +892,6 @@ local function buildKeyGui(onSuccess)
     local win=New("Frame",{BackgroundColor3=T.BG,Size=UDim2.new(0,400,0,1),Position=UDim2.new(0.5,-200,0.5,0),BorderSizePixel=0,ClipsDescendants=false,ZIndex=10},sg)
     Corner(16,win); Stroke(T.Yellow,1.8,win)
     safeOpenWindow(win,400,260)
-    task.delay(0.8,function() if win and win.Parent then win.ClipsDescendants=true end end)
 
     local hdr=New("Frame",{BackgroundColor3=T.Yellow,Size=UDim2.new(1,0,0,52),BorderSizePixel=0,ZIndex=11},win)
     Corner(16,hdr)
@@ -974,7 +943,9 @@ end
 -- ══════════════════════════════════════
 -- MAIN GUI
 -- Layout total: 700px de large
---   [Panel profil 158px] | [Sidebar tabs 136px] | [Content zone reste]
+--   [Panel profil 158px] | [Sidebar tabs 136px] | [Content zone 406px]
+-- FIX: UIListLayout Horizontal sur body — plus de superposition
+--      ClipsDescendants géré uniquement par safeOpenWindow
 -- ══════════════════════════════════════
 local UIRoot
 
@@ -984,11 +955,18 @@ local function buildMainGui()
     if not sg.Parent then sg.Parent=LP.PlayerGui end
     UIRoot=sg
 
-    -- *fenêtre 700px — profil + tabs + content, tout s'aligne* 😏
-    local win=New("Frame",{BackgroundColor3=T.BG,Size=UDim2.new(0,700,0,1),Position=UDim2.new(0.5,-350,0.5,0),BorderSizePixel=0,ClipsDescendants=false},sg)
-    Corner(16,win); Stroke(T.Yellow,1.8,win)
-    safeOpenWindow(win,700,480)
-    task.delay(0.9,function() if win and win.Parent then win.ClipsDescendants=true end end)
+    -- *700px — profil + tabs + content, UIListLayout horizontal
+    --  garantit l'ordre peu importe le timing du renderer* 😏
+    local win=New("Frame",{
+        BackgroundColor3 = T.BG,
+        Size             = UDim2.new(0, 700, 0, 1),
+        Position         = UDim2.new(0.5, -350, 0.5, 0),
+        BorderSizePixel  = 0,
+        ClipsDescendants = false,   -- géré par safeOpenWindow
+    }, sg)
+    Corner(16, win)
+    Stroke(T.Yellow, 1.8, win)
+    safeOpenWindow(win, 700, 480)
 
     -- ── Header ──
     local header=New("Frame",{BackgroundColor3=T.Yellow,Size=UDim2.new(1,0,0,50),BorderSizePixel=0,ZIndex=5},win)
@@ -1015,7 +993,7 @@ local function buildMainGui()
         else
             win.ClipsDescendants=false
             Spring(win,{Size=UDim2.new(0,700,0,480)},0.4)
-            task.delay(0.5,function() if win and win.Parent then win.ClipsDescendants=true end end)
+            task.delay(0.55,function() if win and win.Parent then win.ClipsDescendants=true end end)
         end
     end)
     headerBtn("✕",T.Red,-34,function()
@@ -1028,27 +1006,59 @@ local function buildMainGui()
     UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dg=false end end)
     UserInputService.InputChanged:Connect(function(i) if dg and i.UserInputType==Enum.UserInputType.MouseMovement then local d=i.Position-ds; win.Position=UDim2.new(dp.X.Scale,dp.X.Offset+d.X,dp.Y.Scale,dp.Y.Offset+d.Y) end end)
 
-    -- ── Body (sous le header) ──
-    local body=New("Frame",{BackgroundTransparency=1,Size=UDim2.new(1,0,1,-50),Position=UDim2.new(0,0,0,50)},win)
+    -- ── Body sous le header ──
+    local body=New("Frame",{
+        BackgroundTransparency = 1,
+        Size                   = UDim2.new(1, 0, 1, -50),
+        Position               = UDim2.new(0, 0, 0, 50),
+        ClipsDescendants       = false,
+    }, win)
+
+    -- FIX CORE: UIListLayout Horizontal dans body
+    -- Garantit l'ordre profil→sidebar→content sans dépendre de AbsoluteSize
+    -- Aucun executor ne peut plus foirer le Z-order ou superposer les panels
+    New("UIListLayout", {
+        FillDirection       = Enum.FillDirection.Horizontal,
+        HorizontalAlignment = Enum.HorizontalAlignment.Left,
+        VerticalAlignment   = Enum.VerticalAlignment.Top,
+        SortOrder           = Enum.SortOrder.LayoutOrder,
+        Padding             = UDim.new(0, 0),
+    }, body)
 
     -- ══════════════════════
-    -- PANEL PROFIL GAUCHE
-    -- Placé EN PREMIER dans body, occupe les 158px de gauche
+    -- PANEL PROFIL — LayoutOrder 1
     -- ══════════════════════
-    buildProfilePanel(
+    local profilePanel = buildProfilePanel(
         body,
         LP.UserId,
         LP.Name,
         SessionState.key or "BANANE-FREE-2024"
     )
+    -- LayoutOrder déjà à 1 dans buildProfilePanel, size explicite
+    profilePanel.Size       = UDim2.new(0, 158, 1, 0)
+    profilePanel.LayoutOrder = 1
 
-    -- ── Sidebar tabs (après le profil) ──
-    local sidebar=New("Frame",{BackgroundColor3=T.BG2,Size=UDim2.new(0,136,1,0),Position=UDim2.new(0,158,0,0),BorderSizePixel=0},body)
-    New("UIListLayout",{Padding=UDim.new(0,4),FillDirection=Enum.FillDirection.Vertical,SortOrder=Enum.SortOrder.LayoutOrder},sidebar)
-    Pad(6,6,8,8,sidebar)
+    -- ── Sidebar tabs — LayoutOrder 2 ──
+    local sidebar=New("Frame",{
+        BackgroundColor3 = T.BG2,
+        Size             = UDim2.new(0, 136, 1, 0),
+        BorderSizePixel  = 0,
+        LayoutOrder      = 2,
+    }, body)
+    New("UIListLayout",{
+        Padding           = UDim.new(0, 4),
+        FillDirection     = Enum.FillDirection.Vertical,
+        SortOrder         = Enum.SortOrder.LayoutOrder,
+    }, sidebar)
+    Pad(6, 6, 8, 8, sidebar)
 
-    -- ── Content area ──
-    local contentArea=New("Frame",{BackgroundTransparency=1,Size=UDim2.new(1,-302,1,-8),Position=UDim2.new(0,298,0,4)},body)
+    -- ── Content area — LayoutOrder 3 ──
+    -- 700 - 158 (profil) - 136 (sidebar) = 406px, -8 margin vertical
+    local contentArea=New("Frame",{
+        BackgroundTransparency = 1,
+        Size                   = UDim2.new(0, 398, 1, -8),
+        LayoutOrder            = 3,
+    }, body)
 
     local tabDefs={"👁 ESP","🎯 Aimbot","👻 NoClip","📷 FreeCam","⚡ Teleport","🛡 Bypass","⚙ Config"}
     local tabPages={}; local tabBtns={}; local current=nil
@@ -1087,7 +1097,9 @@ local function buildMainGui()
         local ind=tabBtns[fn]:FindFirstChildOfClass("Frame"); if ind then ind.BackgroundTransparency=0 end
     end
 
-    -- ── Contenu onglets ──
+    -- ══════════════════════════════════════
+    -- CONTENU ONGLETS
+    -- ══════════════════════════════════════
 
     do -- 👁 ESP
         local p=tabPages["👁 ESP"]
@@ -1197,7 +1209,12 @@ local function buildMainGui()
     do -- ⚙ Config
         local p=tabPages["⚙ Config"]
         SectionLabel("⌨ Keybinds",p)
-        local binds={{"Insert / RightShift","Afficher / Cacher l'UI"},{"RMB (Click Droit)","Aimbot normal (viser)"},{"F","Toggle NoClip"},{"G","Toggle FreeCam"}}
+        local binds={
+            {"Insert / RightShift","Afficher / Cacher l'UI"},
+            {"RMB (Click Droit)",  "Aimbot normal (viser)"},
+            {"F",                  "Toggle NoClip"},
+            {"G",                  "Toggle FreeCam"},
+        }
         for _, b in ipairs(binds) do
             local row=New("Frame",{BackgroundColor3=T.BG3,Size=UDim2.new(1,0,0,32),BorderSizePixel=0},p); Corner(9,row)
             New("Frame",{BackgroundColor3=T.YellowBg,Size=UDim2.new(0,3,0.6,0),Position=UDim2.new(0,0,0.2,0)},row)
@@ -1205,7 +1222,7 @@ local function buildMainGui()
             New("TextLabel",{Text=b[2],TextColor3=T.TextDim,Font=Enum.Font.Gotham,TextSize=11,BackgroundTransparency=1,Size=UDim2.new(0.5,-10,1,0),Position=UDim2.new(0.5,0,0,0),TextXAlignment=Enum.TextXAlignment.Left},row)
         end
         SectionLabel("📋 Informations",p)
-        New("TextLabel",{Text="Script : Banane Service v4.3\nJeu    : Infected Lands\nFix    : No particles + profil panel gauche\nExec   : Synapse X · KRNL · Fluxus · Delta\n         Arceus X · Hydrogen · Codex\nDev    : brody 🍌   |   thx Temu 😏",TextColor3=T.TextDim,Font=Enum.Font.Gotham,TextSize=12,BackgroundTransparency=1,Size=UDim2.new(1,0,0,90),TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left},p)
+        New("TextLabel",{Text="Script : Banane Service v4.3\nJeu    : Infected Lands\nFix    : Clip race + UIListLayout horizontal\nExec   : Synapse X · KRNL · Fluxus · Delta\n         Arceus X · Hydrogen · Codex\nDev    : brody 🍌   |   thx Temu 😏",TextColor3=T.TextDim,Font=Enum.Font.Gotham,TextSize=12,BackgroundTransparency=1,Size=UDim2.new(1,0,0,90),TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left},p)
         MakeBtn(p,"🗑  Effacer Session Sauvegardée",function()
             pcall(function() delfile(SESSION_FILE) end)
             pcall(function() StarterGui:SetCore("SendNotification",{Title="🍌 Banane Service",Text="Session effacée — prochaine fois tu retaperas la clé",Duration=3}) end)
