@@ -1908,7 +1908,43 @@ local function boot()
     end)
 end
 
-boot()
+-- ══════════════════════════════════════
+-- WAIT FOR GAME READY — fix barre jaune Roblox
+-- ══════════════════════════════════════
+--[[
+    La barre jaune = loading screen NATIF Roblox, pas nous.
+    Le script s'injectait avant que le DataModel soit fully loaded.
+    TweenService, Drawing, Camera → tous undefined ou partiels
+    pendant le load → tout freeze.
+
+    Fix: on attend game:IsLoaded() + CharacterAdded avant boot().
+    Sur executor auto-exec (Synapse startup scripts), c'est obligatoire.
+]]
+task.spawn(function()
+    -- Attend que le jeu soit fully loaded (barre jaune Roblox disparaît)
+    if not game:IsLoaded() then
+        game.Loaded:Wait()
+    end
+
+    -- Attend que le LocalPlayer existe (parfois nil au boot executor)
+    local lp = Players.LocalPlayer
+    if not lp then
+        Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+        lp = Players.LocalPlayer
+    end
+
+    -- Attend que le character soit spawned et que HumanoidRootPart soit là
+    -- (sans ça, les TP et noclip crashent au premier appel)
+    if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
+        local char = lp.Character or lp.CharacterAdded:Wait()
+        char:WaitForChild("HumanoidRootPart", 10)
+    end
+
+    -- Buffer: laisse RunService, Camera, Drawing s'initialiser proprement
+    task.wait(0.5)
+
+    boot()
+end)
 
 --[[
 ══════════════════════════════════════════════════════
