@@ -1008,7 +1008,8 @@ local function buildMainGui()
 
     -- ── Body sous le header ──
     local body=New("Frame",{
-        BackgroundTransparency = 1,
+        BackgroundColor3       = T.BG,
+        BackgroundTransparency = 0,
         Size                   = UDim2.new(1, 0, 1, -50),
         Position               = UDim2.new(0, 0, 0, 50),
         ClipsDescendants       = false,
@@ -1045,6 +1046,8 @@ local function buildMainGui()
         BorderSizePixel  = 0,
         LayoutOrder      = 2,
     }, body)
+    -- bordure droite sidebar
+    New("Frame",{BackgroundColor3=T.Border,Size=UDim2.new(0,1,1,0),Position=UDim2.new(1,-1,0,0),BorderSizePixel=0},sidebar)
     New("UIListLayout",{
         Padding           = UDim.new(0, 4),
         FillDirection     = Enum.FillDirection.Vertical,
@@ -1055,8 +1058,10 @@ local function buildMainGui()
     -- ── Content area — LayoutOrder 3 ──
     -- 700 - 158 (profil) - 136 (sidebar) = 406px, -8 margin vertical
     local contentArea=New("Frame",{
-        BackgroundTransparency = 1,
+        BackgroundColor3       = T.BG,
+        BackgroundTransparency = 0,
         Size                   = UDim2.new(0, 398, 1, -8),
+        Position               = UDim2.new(0, 0, 0, 4),
         LayoutOrder            = 3,
     }, body)
 
@@ -1064,7 +1069,7 @@ local function buildMainGui()
     local tabPages={}; local tabBtns={}; local current=nil
 
     for _, name in ipairs(tabDefs) do
-        local page=New("ScrollingFrame",{BackgroundTransparency=1,Size=UDim2.new(1,0,1,0),BorderSizePixel=0,ScrollBarThickness=3,ScrollBarImageColor3=T.Yellow,Visible=false,CanvasSize=UDim2.new(0,0,0,0)},contentArea)
+        local page=New("ScrollingFrame",{BackgroundColor3=T.BG,BackgroundTransparency=0,Size=UDim2.new(1,0,1,0),BorderSizePixel=0,ScrollBarThickness=3,ScrollBarImageColor3=T.Yellow,Visible=false,CanvasSize=UDim2.new(0,0,0,0)},contentArea)
         local layout=New("UIListLayout",{Padding=UDim.new(0,6),FillDirection=Enum.FillDirection.Vertical,SortOrder=Enum.SortOrder.LayoutOrder},page)
         Pad(4,8,4,8,page)
         layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() page.CanvasSize=UDim2.new(0,0,0,layout.AbsoluteContentSize.Y+12) end)
@@ -1080,11 +1085,11 @@ local function buildMainGui()
             if current==name then return end
             if current then
                 local old=tabPages[current]; local oldBtn=tabBtns[current]
-                Tween(old,{BackgroundTransparency=1}); Tween(oldBtn,{BackgroundColor3=T.BG,TextColor3=T.TextDim})
+                Tween(old,{BackgroundTransparency=0}); Tween(oldBtn,{BackgroundColor3=T.BG,TextColor3=T.TextDim})
                 local oldInd=oldBtn:FindFirstChildOfClass("Frame"); if oldInd then Tween(oldInd,{BackgroundTransparency=1}) end
                 task.wait(0.06); old.Visible=false
             end
-            current=name; page.Visible=true; page.BackgroundTransparency=1
+            current=name; page.Visible=true; page.BackgroundTransparency=0
             Tween(btn,{BackgroundColor3=T.YellowBg,TextColor3=T.Yellow})
             if indicator then Tween(indicator,{BackgroundTransparency=0}) end
         end)
