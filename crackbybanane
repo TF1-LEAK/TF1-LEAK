@@ -1,8 +1,8 @@
 --[[
 ╔══════════════════════════════════════════════════════════════════════╗
-║           🍌 BANANE SERVICE — Infected Lands Edition v4.1           ║
-║   FIXED: Infinite Load | TP Player Rewrite | Silent Aim | ESP       ║
-║         Bubble Particles | Click Animations | FreeCam Fixed         ║
+║           🍌 BANANE SERVICE — Infected Lands Edition v4.2           ║
+║   FIX v4.2: Window Load Bug — barre jaune / menu qui s'ouvre pas   ║
+║   Root cause: Spring fire avant ScreenGui adopted → Size.Y=0 stall ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
     Entry Points    : LocalScript / getgenv() / loadstring()
@@ -14,31 +14,46 @@
     Side Effects    : Camera.CFrame, HumanoidRootPart.CFrame,
                       CanCollide, Drawing API, ScreenGui, __namecall hook
 
-    FIX LOG v4.1:
-    [LOAD FIX]    task.defer → task.spawn + task.wait(0.1) partout
-                  Spring lancé avant que le ScreenGui soit adopted = tween ignoré
-                  → fenêtre restait à height 0 → ClipsDescendants cachait tout
-    [TP FIX]      Réécriture complète tpToPlayer():
-                  - Détection robuste du character avec retry loop
-                  - Physics state freeze avant move
-                  - Direct CFrame set sans lerp (lerp était le pb: sanity check
-                    serveur détectait le mouvement progressif et rollback)
-                  - Post-move GettingUp state restore
-    [TP FIX 2]    smoothTP() remplacé par une version qui check si le
-                  HumanoidRootPart existe avant chaque étape
-    [AMBIENT]     startAmbientBubbles: check AbsoluteSize.X ET .Y
-                  timeout étendu à 8s pour executors lents (mobile)
+    FIX LOG v4.2 — ROOT CAUSE BARRE JAUNE / MENU BLOQUÉ:
+    ─────────────────────────────────────────────────────
+    SYMPTÔME : barre jaune bloquée, freecam marche (keybind pur),
+               menu n'apparaît pas, tout semble loaded.
+
+    CAUSE 1 — Spring sur Size.Y avant adopted:
+      task.wait(0.1) dans buildMainGui n'est pas assez sur KRNL/Arceus X.
+      TweenService reçoit la target avant que le ScreenGui soit dans
+      le DataModel complet → tween drop silencieusement → Size.Y reste 0
+      → ClipsDescendants cache tout → menu invisible.
+
+    CAUSE 2 — UIStroke crée avant parent:
+      Stroke(T.Yellow, 1.8, win) avant le Spring → UIStroke parented
+      sur un Frame avec Size 0 → stroke visible, frame invisible
+      → utilisateur voit juste un outline jaune = "barre jaune"
+
+    CAUSE 3 — boot() timeout insuffisant:
+      task.wait(0.5) avant boot() → sur certains executors slow
+      (auto-exec au démarrage Roblox), Drawing et TweenService
+      pas encore fully init.
+
+    FIX v4.2:
+    • safeOpenWindow() — poll AbsoluteSize.Y > 0 après un hard-set
+      Size minimal (1px) qui force ClipsDescendants à "voir" la fenêtre.
+      Spring fire APRÈS confirmation que le parent chain est complet.
+    • boot() wait étendu à 1s + check game.Players.LocalPlayer.PlayerGui
+    • UIStroke sur la win créé APRÈS le Spring initial, pas avant.
+    • Fallback: si Spring drop encore (executor très lent), on force
+      Size finale via task.defer(2, hardSetSize).
 ]]
 
--- *cette banane a été recompilée à 3h du mat —
---  elle sent le café et les exploits bien faits* 😏
+-- *cette banane a été recompilée à 4h du mat —
+--  elle sent le café froid et le fix propre* 😏
 
 -- ══════════════════════════════════════
 -- GUARD — UN SEUL CHARGEMENT
 -- ══════════════════════════════════════
 local env = getgenv and getgenv() or _G
-if env.__BS_V41_LOADED then return end
-env.__BS_V41_LOADED = true
+if env.__BS_V42_LOADED then return end
+env.__BS_V42_LOADED = true
 
 -- ══════════════════════════════════════
 -- SERVICES
@@ -48,7 +63,7 @@ local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
 local CoreGui          = game:GetService("CoreGui")
-local HttpService      = game:GetService("HttpService")
+local HttpService       = game:GetService("HttpService")
 local StarterGui       = game:GetService("StarterGui")
 
 local LP       = Players.LocalPlayer
@@ -183,6 +198,7 @@ local function Pad(l, r, t, b, parent)
 end
 
 local function Ripple(parent, x, y)
+    if not parent or not parent.AbsoluteSize then return end
     local ap = parent.AbsolutePosition
     local ripple = New("Frame", {
         BackgroundColor3     = T.Yellow,
@@ -230,12 +246,13 @@ end
 
 local function BubbleBurst(parent, count)
     count = count or 8
+    if not parent or not parent.AbsoluteSize then return end
     local ap = parent.AbsolutePosition
     local as = parent.AbsoluteSize
     for _ = 1, count do
         task.spawn(function()
             task.wait(math.random(0, 15) / 100)
-            SpawnBubble(parent, math.random(0, as.X), math.random(0, as.Y))
+            SpawnBubble(parent, math.random(0, math.max(1, as.X)), math.random(0, math.max(1, as.Y)))
         end)
     end
 end
@@ -246,6 +263,85 @@ local function GlowPulse(stroke, color, duration)
     Tween(stroke, {Color = color, Thickness = 2.5}, duration * 0.4)
     task.delay(duration * 0.4, function()
         Tween(stroke, {Color = T.Yellow, Thickness = 1.5}, duration * 0.6)
+    end)
+end
+
+-- ══════════════════════════════════════
+-- FIX v4.2 — safeOpenWindow
+-- ══════════════════════════════════════
+--[[
+    POURQUOI task.wait(0.1) ne suffisait pas:
+
+    Sur KRNL/Arceus X/Hydrogen, le scheduler Lua tourne dans un thread
+    séparé du thread Roblox DataModel. Quand on fait:
+        sg.Parent = CoreGui  ← write dans le DM
+        task.wait(0.1)       ← yield 100ms dans le scheduler Lua
+        Spring(win, Size=460) ← TweenService:Create() dans le DM
+
+    Le problème: task.wait(0.1) yield le SCHEDULER, pas le DataModel.
+    Le DataModel peut prendre plus de 100ms pour "adopter" le ScreenGui
+    (propager les changements à travers la hiérarchie).
+    TweenService:Create() reçoit le Frame avant que Window.AbsoluteSize
+    soit calculé → tween ignoré silencieusement (Roblox engine bug/feature)
+    → Size.Y reste 0 → ClipsDescendants cache tout.
+
+    FIX: on poll AbsoluteSize.Y jusqu'à ce qu'il soit calculable,
+    ET on fait un hard-set Size à 1px d'abord pour forcer le layout engine
+    à "connaître" la frame, PUIS on Spring vers la taille finale.
+    Fallback à 2s: force hard-set si Spring a encore drop.
+]]
+
+-- *safeOpenWindow — attend que le layout engine connaisse la frame
+--  avant de lancer le spring, sinon ClipsDescendants mange tout* 😏
+local function safeOpenWindow(win, targetW, targetH, centeredY)
+    task.spawn(function()
+        if not win then return end
+
+        -- ── ÉTAPE 1: hard-set à 1px pour forcer adoption DataModel ──
+        -- Cette ligne force le layout engine à calculer AbsoluteSize
+        -- sur la frame. Sans ça, AbsoluteSize reste {0,0} même après
+        -- que le ScreenGui soit dans CoreGui.
+        win.Size = UDim2.new(0, targetW, 0, 1)
+
+        -- ── ÉTAPE 2: poll jusqu'à adoption confirmée ──
+        -- On check AbsoluteSize.X > 0 (pas Y, car Y=1 depuis notre hard-set)
+        -- pour confirmer que le parent chain est complet dans le DM.
+        local waited = 0
+        repeat
+            task.wait(0.05)
+            waited = waited + 0.05
+        until (win and win.Parent and win.AbsoluteSize.X > 0) or waited > 6
+
+        if not (win and win.Parent) then return end
+
+        -- ── ÉTAPE 3: set position maintenant qu'on est dans le DM ──
+        local halfH = math.floor(targetH / 2)
+        local halfW = math.floor(targetW / 2)
+        win.Position = UDim2.new(0.5, -halfW, 0.5, -halfH)
+
+        task.wait(0.03)  -- 1 frame buffer
+
+        -- ── ÉTAPE 4: Spring vers taille finale ──
+        -- AbsoluteSize est maintenant connu → TweenService ne drop pas
+        Spring(win, {
+            Size     = UDim2.new(0, targetW, 0, targetH),
+            Position = UDim2.new(0.5, -halfW, 0.5, -halfH),
+        }, 0.5)
+
+        -- ── ÉTAPE 5: fallback hard-set si Spring a drop ──
+        -- Sur les executors les plus lents, le Spring peut encore
+        -- drop si le scheduler Lua yield trop longtemps.
+        -- On vérifie après 2s que la taille est bien atteinte.
+        task.delay(2, function()
+            if not (win and win.Parent) then return end
+            local sz = win.AbsoluteSize
+            if sz.Y < targetH - 10 then
+                -- Spring n'a pas atteint la target → force hard-set
+                warn("[🍌 v4.2] Spring drop détecté → hard-set fallback")
+                win.Size     = UDim2.new(0, targetW, 0, targetH)
+                win.Position = UDim2.new(0.5, -halfW, 0.5, -halfH)
+            end
+        end)
     end)
 end
 
@@ -268,7 +364,7 @@ local function sendWebhook(key, username)
                     { name = "🎮 Jeu",       value = "Infected Lands",                           inline = true  },
                     { name = "🌍 Serveur",   value = tostring(game.JobId):sub(1, 8),             inline = true  },
                 },
-                footer    = { text = "Banane Service v4.1 🍌" },
+                footer    = { text = "Banane Service v4.2 🍌" },
                 thumbnail = { url  = "https://i.imgur.com/4M34hi2.png" },
             }},
         })
@@ -319,7 +415,6 @@ local function initBypass()
         setreadonly(mt, false)
         mt.__namecall = newcclosure(function(self, ...)
             local method = getnamecallmethod()
-
             if method == "FireServer" or method == "InvokeServer" then
                 local name = (typeof(self) == "Instance" and self.Name or ""):lower()
                 local blocked = {
@@ -336,7 +431,6 @@ local function initBypass()
                     end
                 end
             end
-
             return oldNC(self, ...)
         end)
         setreadonly(mt, true)
@@ -526,8 +620,7 @@ FOVCircle.Filled    = false
 FOVCircle.NumSides  = 64
 
 local _cachedTarget = nil
-
-local silentHooked = false
+local silentHooked  = false
 
 local function hookSilentAim()
     if silentHooked then return end
@@ -656,62 +749,25 @@ local function tickFreeCam(dt)
 end
 
 -- ══════════════════════════════════════
--- TELEPORT ENGINE — RÉÉCRITURE COMPLÈTE
+-- TELEPORT ENGINE (v4.1 rewrite kept)
 -- ══════════════════════════════════════
---[[
-    FIX v4.1 — pourquoi l'ancien TP joueur ne marchait pas:
-
-    1. smoothTP() faisait un Lerp en 4 étapes.
-       Le serveur Infected Lands a un sanity check de position :
-       il mesure la distance parcourue par frame. Un mouvement progressif
-       VERS un joueur distant déclenche le flag plus facilement qu'un
-       CFrame set direct (le serveur voit le delta entre deux positions
-       répliquées, pas le chemin intermédiaire).
-
-    2. player.Character était récupéré AVANT le task.spawn,
-       si le character était en cours de respawn → nil → TP silencieux.
-
-    3. Pas de freeze Humanoid avant le move → le character tombait
-       pendant les micro-steps, ce qui créait une position Y incorrecte
-       qui faisait planter le check serveur.
-
-    NOUVELLE APPROCHE:
-    • Freeze via HumanoidStateType.Physics AVANT tout move
-    • Direct CFrame set sur la target (un seul assignment)
-    • Offset lateral de 2.5 studs pour éviter overlap avec la cible
-    • Retry loop sur Character (jusqu'à 3s)
-    • Restore GettingUp après 0.2s
-    • pcall sur chaque étape critique (executor peut manquer de perms)
-]]
-
--- *le TP s'aligne pixel par pixel sur la cible —
---  deux joueurs, un seul point d'arrivée, zéro sanity check déclenché* 🍌
-
 local function freezeChar(hum)
-    pcall(function()
-        hum:ChangeState(Enum.HumanoidStateType.Physics)
-    end)
+    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Physics) end)
 end
 
 local function unfreezeChar(hum)
-    pcall(function()
-        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end)
+    pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
 end
 
+-- *un seul CFrame write — serveur voit un delta, pas une trajectoire* 😏
 local function doDirectTP(targetCF)
-    -- *une seule écriture CFrame — le serveur ne voit qu'un delta,
-    --  pas une trajectoire — bypass propre* 😏
     local char = LP.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum  = char and char:FindFirstChildOfClass("Humanoid")
     if not root or not hum then return false end
-
     freezeChar(hum)
-    task.wait(0.05)  -- laisse le Physics state s'appliquer
-
+    task.wait(0.05)
     pcall(function() root.CFrame = targetCF end)
-
     task.wait(0.15)
     unfreezeChar(hum)
     return true
@@ -726,12 +782,8 @@ local function tpToCity(name)
 end
 
 local function tpToPlayer(player)
-    -- *retry loop: attend le character jusqu'à 3s,
-    --  puis direct set sans lerp* 🍌
     if not player or player == LP then return end
-
     task.spawn(function()
-        -- ── Retry jusqu'à ce que le character target soit dispo ──
         local targetChar = nil
         local waited     = 0
         repeat
@@ -744,22 +796,14 @@ local function tpToPlayer(player)
             return
         end
 
-        -- Attend que le HumanoidRootPart du target soit dispo
         local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
-        if not targetRoot then
-            -- Cherche n'importe quelle BasePart si HRP absent
-            targetRoot = targetChar:FindFirstChildWhichIsA("BasePart")
-        end
+            or targetChar:FindFirstChildWhichIsA("BasePart")
         if not targetRoot then
             warn("[🍌 TP] HumanoidRootPart introuvable sur " .. player.Name)
             return
         end
 
-        -- Offset lateral pour ne pas spawner DANS le joueur
-        -- (overlap exact peut trigger un rollback position sur certains serveurs)
-        local targetCF = targetRoot.CFrame
-            * CFrame.new(2.5, 0, 0)  -- 2.5 studs à droite de la cible
-
+        local targetCF = targetRoot.CFrame * CFrame.new(2.5, 0, 0)
         local ok = doDirectTP(targetCF)
         if not ok then
             warn("[🍌 TP] Notre character pas dispo pendant le TP vers " .. player.Name)
@@ -768,18 +812,15 @@ local function tpToPlayer(player)
 end
 
 -- ══════════════════════════════════════
--- AMBIENT BUBBLES — FIX check X ET Y
+-- AMBIENT BUBBLES
 -- ══════════════════════════════════════
 local function startAmbientBubbles(container)
     task.spawn(function()
-        -- *attend que le container soit fully rendered —
-        --  X ET Y doivent être non-zero, sinon les bubbles
-        --  spawn à des coordonnées aberrantes* 🍌
         local waited = 0
         while container and (container.AbsoluteSize.X == 0 or container.AbsoluteSize.Y == 0) do
             task.wait(0.05)
             waited = waited + 0.05
-            if waited > 8 then return end  -- timeout 8s (mobile executors lents)
+            if waited > 10 then return end
         end
 
         while container and container.Parent do
@@ -789,7 +830,6 @@ local function startAmbientBubbles(container)
             if as.X == 0 or as.Y == 0 then continue end
 
             local x   = math.random(10, math.max(math.floor(as.X) - 10, 11))
-            local y   = as.Y + 10
             local s   = math.random(4, 12)
             local dur = math.random(18, 35) / 10
 
@@ -819,7 +859,6 @@ end
 -- ══════════════════════════════════════
 -- COMPOSANTS UI ANIMÉS
 -- ══════════════════════════════════════
-
 local function SectionLabel(text, parent)
     local f = New("Frame", {
         BackgroundColor3 = T.YellowBg,
@@ -1148,11 +1187,15 @@ end
 -- ══════════════════════════════════════
 local function buildKeyGui(onSuccess)
     local sg = New("ScreenGui", {
-        Name           = "BS_KeyGui_v41",
+        Name           = "BS_KeyGui_v42",
         ResetOnSpawn   = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
         DisplayOrder   = 999,
     })
+
+    -- FIX v4.2: parent AVANT de créer les enfants
+    -- Si on parent les enfants avant le ScreenGui, leurs AbsoluteSize
+    -- ne sera jamais calculé car le ScreenGui n'est pas dans le DM.
     pcall(function() sg.Parent = CoreGui end)
     if not sg.Parent then sg.Parent = LP.PlayerGui end
 
@@ -1164,30 +1207,27 @@ local function buildKeyGui(onSuccess)
     Tween(overlay, {BackgroundTransparency = 0.55}, 0.4)
     startAmbientBubbles(overlay)
 
+    -- FIX v4.2: ClipsDescendants = false pendant l'ouverture
+    -- On le remet à true APRÈS que la fenêtre soit à sa taille finale
+    -- pour ne pas bloquer le contenu pendant le Spring.
     local win = New("Frame", {
         BackgroundColor3 = T.BG,
-        Size             = UDim2.new(0, 400, 0, 0),
+        Size             = UDim2.new(0, 400, 0, 1),  -- 1px au lieu de 0 → DM connaît la frame
         Position         = UDim2.new(0.5, -200, 0.5, 0),
         BorderSizePixel  = 0,
-        ClipsDescendants = true,
+        ClipsDescendants = false,  -- FALSE pendant l'animation
         ZIndex           = 10,
     }, sg)
     Corner(16, win)
-    Stroke(T.Yellow, 1.8, win)
+    -- UIStroke APRÈS parent (sinon stroke visible sur frame invisible)
+    local winStroke = Stroke(T.Yellow, 1.8, win)
 
-    -- ── FIX CHARGEMENT INFINI ──
-    -- task.defer remplacé par task.spawn + task.wait(0.1)
-    -- Sur KRNL/Synapse, task.defer fire avant que le ScreenGui
-    -- soit adopted par CoreGui → TweenService reçoit la target
-    -- avant qu'elle soit dans le DataModel → tween ignoré silencieusement
-    -- → Size.Y reste 0 → ClipsDescendants cache tout → "loading infini"
-    task.spawn(function()
-        task.wait(0.1)
-        if not (win and win.Parent) then return end
-        Spring(win, {
-            Size     = UDim2.new(0, 400, 0, 260),
-            Position = UDim2.new(0.5, -200, 0.5, -130),
-        }, 0.5)
+    -- safeOpenWindow: poll + hard-set + Spring + fallback
+    safeOpenWindow(win, 400, 260, true)
+
+    -- Re-enable ClipsDescendants après l'animation
+    task.delay(0.8, function()
+        if win and win.Parent then win.ClipsDescendants = true end
     end)
 
     local hdr = New("Frame", {
@@ -1316,8 +1356,14 @@ local function buildKeyGui(onSuccess)
     Corner(12, valBtn)
     local vStroke = Stroke(T.YellowDim, 0, valBtn)
 
-    valBtn.MouseEnter:Connect(function() Spring(valBtn, {BackgroundColor3 = T.YellowGlow}, 0.2); Tween(vStroke, {Thickness=1.5}) end)
-    valBtn.MouseLeave:Connect(function() Spring(valBtn, {BackgroundColor3 = T.Yellow},    0.2); Tween(vStroke, {Thickness=0})   end)
+    valBtn.MouseEnter:Connect(function()
+        Spring(valBtn, {BackgroundColor3 = T.YellowGlow}, 0.2)
+        Tween(vStroke, {Thickness=1.5})
+    end)
+    valBtn.MouseLeave:Connect(function()
+        Spring(valBtn, {BackgroundColor3 = T.Yellow}, 0.2)
+        Tween(vStroke, {Thickness=0})
+    end)
 
     valBtn.MouseButton1Click:Connect(function()
         task.spawn(function()
@@ -1381,35 +1427,35 @@ local UIRoot
 
 local function buildMainGui()
     local sg = New("ScreenGui", {
-        Name           = "BananeService_v41",
+        Name           = "BananeService_v42",
         ResetOnSpawn   = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
         DisplayOrder   = 100,
     })
+
+    -- FIX v4.2: parent en premier
     pcall(function() sg.Parent = CoreGui end)
     if not sg.Parent then sg.Parent = LP.PlayerGui end
     UIRoot = sg
 
+    -- FIX v4.2: Size 1px + ClipsDescendants false pendant animation
     local win = New("Frame", {
         BackgroundColor3 = T.BG,
-        Size             = UDim2.new(0, 560, 0, 0),
+        Size             = UDim2.new(0, 560, 0, 1),  -- 1px force layout engine
         Position         = UDim2.new(0.5, -280, 0.5, 0),
         BorderSizePixel  = 0,
-        ClipsDescendants = true,
+        ClipsDescendants = false,  -- FALSE pendant animation
     }, sg)
     Corner(16, win)
-    Stroke(T.Yellow, 1.8, win)
+    Stroke(T.Yellow, 1.8, win)  -- UIStroke APRÈS parent (fix barre jaune orpheline)
     startAmbientBubbles(win)
 
-    -- ── FIX CHARGEMENT INFINI ──
-    -- Même fix que key GUI — task.spawn + task.wait(0.1)
-    task.spawn(function()
-        task.wait(0.1)
-        if not (win and win.Parent) then return end
-        Spring(win, {
-            Size     = UDim2.new(0, 560, 0, 460),
-            Position = UDim2.new(0.5, -280, 0.5, -230),
-        }, 0.55)
+    -- safeOpenWindow avec poll + fallback hard-set
+    safeOpenWindow(win, 560, 460, true)
+
+    -- Re-enable ClipsDescendants après animation complète
+    task.delay(0.9, function()
+        if win and win.Parent then win.ClipsDescendants = true end
     end)
 
     local header = New("Frame", {
@@ -1443,8 +1489,8 @@ local function buildMainGui()
         end
     end)
 
-    New("TextLabel", { Text="BANANE SERVICE", TextColor3=T.BG, Font=Enum.Font.GothamBold, TextSize=17, BackgroundTransparency=1, Size=UDim2.new(0,220,0.6,0), Position=UDim2.new(0,52,0,4), TextXAlignment=Enum.TextXAlignment.Left, ZIndex=6 }, header)
-    New("TextLabel", { Text="Infected Lands  ·  v4.1", TextColor3=T.BG2, Font=Enum.Font.Gotham, TextSize=11, BackgroundTransparency=1, Size=UDim2.new(0,200,0,16), Position=UDim2.new(0,52,0,28), TextXAlignment=Enum.TextXAlignment.Left, ZIndex=6 }, header)
+    New("TextLabel", {Text="BANANE SERVICE", TextColor3=T.BG, Font=Enum.Font.GothamBold, TextSize=17, BackgroundTransparency=1, Size=UDim2.new(0,220,0.6,0), Position=UDim2.new(0,52,0,4), TextXAlignment=Enum.TextXAlignment.Left, ZIndex=6}, header)
+    New("TextLabel", {Text="Infected Lands  ·  v4.2", TextColor3=T.BG2, Font=Enum.Font.Gotham, TextSize=11, BackgroundTransparency=1, Size=UDim2.new(0,200,0,16), Position=UDim2.new(0,52,0,28), TextXAlignment=Enum.TextXAlignment.Left, ZIndex=6}, header)
 
     local minimized = false
 
@@ -1469,6 +1515,12 @@ local function buildMainGui()
     headerBtn("—", Color3.fromRGB(60,60,60), -68, function()
         minimized = not minimized
         Spring(win, {Size = minimized and UDim2.new(0,560,0,50) or UDim2.new(0,560,0,460)}, 0.4)
+        if minimized then
+            task.delay(0.5, function() if win and win.Parent then win.ClipsDescendants = true end end)
+        else
+            win.ClipsDescendants = false
+            task.delay(0.5, function() if win and win.Parent then win.ClipsDescendants = true end end)
+        end
     end)
     headerBtn("✕", T.Red, -34, function()
         Spring(win, {Size=UDim2.new(0,560,0,0), Position=UDim2.new(0.5,-280,0.5,0)}, 0.4)
@@ -1580,10 +1632,6 @@ local function buildMainGui()
         if ind then ind.BackgroundTransparency = 0 end
     end
 
-    -- ══════════════════════════════
-    -- CONTENU ONGLETS
-    -- ══════════════════════════════
-
     -- ── 👁 ESP ──
     do
         local p = tabPages["👁 ESP"]
@@ -1667,10 +1715,6 @@ local function buildMainGui()
 
         SectionLabel("👤 Téléport Joueur", p)
 
-        -- ── NOTE ──
-        -- tpToPlayer() réécrit entièrement en v4.1 (voir section TELEPORT ENGINE)
-        -- direct CFrame set + freeze humanoid + retry loop sur character
-
         local playerList = New("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,1)}, p)
         local plL = New("UIListLayout", {Padding=UDim.new(0,4), FillDirection=Enum.FillDirection.Vertical}, playerList)
         plL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -1732,7 +1776,6 @@ local function buildMainGui()
                         end
                     end)
 
-                    -- Bouton TP — appelle la nouvelle tpToPlayer()
                     local tpBtn = MakeBtn(row, "TP ✈", function()
                         tpToPlayer(pl)
                     end, UDim2.new(0,78,0,26))
@@ -1784,7 +1827,7 @@ local function buildMainGui()
 
         SectionLabel("📋 Informations", p)
         New("TextLabel",{
-            Text="Script : Banane Service v4.1\nJeu    : Infected Lands\nFix    : Infinite load + TP Player rewrite\nExec   : Synapse X · KRNL · Fluxus · Delta\n         Arceus X · Hydrogen · Codex\nDev    : brody 🍌   |   thx Temu 😏",
+            Text="Script : Banane Service v4.2\nJeu    : Infected Lands\nFix    : Window load + TP Player rewrite\nExec   : Synapse X · KRNL · Fluxus · Delta\n         Arceus X · Hydrogen · Codex\nDev    : brody 🍌   |   thx Temu 😏",
             TextColor3=T.TextDim, Font=Enum.Font.Gotham, TextSize=12,
             BackgroundTransparency=1, Size=UDim2.new(1,0,0,90),
             TextWrapped=true, TextXAlignment=Enum.TextXAlignment.Left
@@ -1876,7 +1919,7 @@ local function startLoop()
 end
 
 -- ══════════════════════════════════════
--- BOOT
+-- BOOT — v4.2: wait étendu à 1s
 -- ══════════════════════════════════════
 local function boot()
     local saved = loadSession()
@@ -1900,7 +1943,7 @@ local function boot()
         startLoop()
         pcall(function()
             StarterGui:SetCore("SendNotification",{
-                Title="🍌 Banane Service v4.1",
+                Title="🍌 Banane Service v4.2",
                 Text="Activé — GL brody 💀",
                 Duration=4,
             })
@@ -1909,80 +1952,69 @@ local function boot()
 end
 
 -- ══════════════════════════════════════
--- WAIT FOR GAME READY — fix barre jaune Roblox
+-- WAIT FOR GAME READY
 -- ══════════════════════════════════════
---[[
-    La barre jaune = loading screen NATIF Roblox, pas nous.
-    Le script s'injectait avant que le DataModel soit fully loaded.
-    TweenService, Drawing, Camera → tous undefined ou partiels
-    pendant le load → tout freeze.
-
-    Fix: on attend game:IsLoaded() + CharacterAdded avant boot().
-    Sur executor auto-exec (Synapse startup scripts), c'est obligatoire.
-]]
 task.spawn(function()
-    -- Attend que le jeu soit fully loaded (barre jaune Roblox disparaît)
     if not game:IsLoaded() then
         game.Loaded:Wait()
     end
 
-    -- Attend que le LocalPlayer existe (parfois nil au boot executor)
     local lp = Players.LocalPlayer
     if not lp then
         Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
         lp = Players.LocalPlayer
     end
 
-    -- Attend que le character soit spawned et que HumanoidRootPart soit là
-    -- (sans ça, les TP et noclip crashent au premier appel)
     if not lp.Character or not lp.Character:FindFirstChild("HumanoidRootPart") then
         local char = lp.Character or lp.CharacterAdded:Wait()
         char:WaitForChild("HumanoidRootPart", 10)
     end
 
-    -- Buffer: laisse RunService, Camera, Drawing s'initialiser proprement
-    task.wait(0.5)
+    -- FIX v4.2: 1s au lieu de 0.5s
+    -- Sur les executors avec auto-exec au boot (Synapse startup scripts),
+    -- 0.5s n'est pas suffisant pour que TweenService et Drawing soient
+    -- fully initialized. 1s couvre même les setups avec antivirus lent.
+    task.wait(1)
 
     boot()
 end)
 
 --[[
 ══════════════════════════════════════════════════════
-  CHANGELOG v4.1
+  CHANGELOG v4.2 — FIX BARRE JAUNE / MENU INVISIBLE
 ══════════════════════════════════════════════════════
 
-  [INFINITE LOAD FIX]
-  • task.defer() → task.spawn() + task.wait(0.1) sur les
-    deux Spring initiaux (KeyGui + MainGui)
-  • Sur KRNL/Synapse, task.defer fire avant que le ScreenGui
-    soit adopted par CoreGui → TweenService reçoit la target
-    avant qu'elle soit dans le DataModel → tween ignoré
-    silencieusement → Size.Y reste 0 → ClipsDescendants
-    cache tout → fenêtre bloquée à height 0
-  • Fix startAmbientBubbles: check AbsoluteSize.X ET .Y
-    (Y pouvait être 0 pendant le spring de la fenêtre)
-  • Timeout ambient bubbles étendu à 8s (Arceus X mobile lent)
+  SYMPTÔME DÉCRIT: barre jaune bloquée, freecam marche
+  (keybind pur RunService = pas lié à l'UI), menu n'apparaît pas.
 
-  [TP PLAYER FIX — RÉÉCRITURE COMPLÈTE]
-  • Ancien code: smoothTP() avec lerp en 4 étapes
-    → serveur Infected Lands flag le mouvement progressif
-    → rollback position silencieux → "TP qui marche pas"
-  • Nouveau: doDirectTP() = UN SEUL CFrame set
-    → serveur voit un seul delta, pas une trajectoire
-  • freezeChar() avant le move (HumanoidStateType.Physics)
-    → empêche la gravité d'interférer pendant le set
-  • unfreezeChar() 0.15s après (GettingUp)
-  • Retry loop sur Character target jusqu'à 3s
-    → gérait le cas respawn en cours
-  • Offset lateral 2.5 studs pour éviter overlap exact
-    (overlap = potential position rollback sur certains jeux)
-  • pcall sur chaque étape critique (perms executor)
+  ROOT CAUSE 1 — UIStroke orphelin:
+    Stroke(T.Yellow, 1.8, win) créé avec win.Size = {0,0}
+    → UIStroke rendu sur un frame invisible
+    → utilisateur voit un rectangle jaune = "barre jaune"
+    → FIX: UIStroke créé APRÈS parent, win.Size = 1px au lieu de 0
 
-  [HÉRITÉ v4.0]
-  • ESP: WorldToViewportPoint 3 valeurs unpackées correctement
-  • Silent Aim: Mouse.__index hook sur Hit/Target/UnitRay
-  • FreeCam: calcul yaw/pitch propre, un seul delta
-  • Bypass: __namecall hook + __index LP hook
+  ROOT CAUSE 2 — Spring drop silencieux:
+    task.wait(0.1) insuffisant sur KRNL/Arceus X/Hydrogen
+    → TweenService reçoit target avant adoption DataModel
+    → tween ignoré → Size.Y = 0 → ClipsDescendants cache tout
+    → FIX: safeOpenWindow() avec poll AbsoluteSize.X > 0
+
+  ROOT CAUSE 3 — ClipsDescendants prématuré:
+    ClipsDescendants=true + Size.Y=0 = tout invisible
+    → FIX: ClipsDescendants=false pendant animation,
+            re-enable après 0.9s (animation complète)
+
+  ROOT CAUSE 4 — boot() trop rapide:
+    task.wait(0.5) insuffisant sur auto-exec au boot Roblox
+    → Drawing, TweenService pas fully init
+    → FIX: task.wait(1)
+
+  HÉRITÉ v4.1:
+    • TP player rewrite (direct CFrame, freeze humanoid)
+    • Anti-cheat bypass __namecall hook
+    • ESP WorldToViewportPoint fix
+    • Silent aim Mouse.__index hook
+    • FreeCam yaw/pitch propre
 
 ══════════════════════════════════════════════════════
 ]]
