@@ -1,1423 +1,1854 @@
 --[[
-    ╔══════════════════════════════════════════════════════════════╗
-    ║          INFECTED LANDS - ULTIMATE SCRIPT v2.0              ║
-    ║     ESP | Aimbot | Silent Aim | FreeCam | NoClip            ║
-    ║     TeleportCity | PlayerTP | Anti-Cheat Bypass             ║
-    ║                   KEY SYSTEM                                 ║
-    ╚══════════════════════════════════════════════════════════════╝
+    ╔══════════════════════════════════════════════════════════╗
+    ║         BANANA HUB - INFECTED LANDS CHEAT               ║
+    ║         Version: 2.0 | Universal Executor Support        ║
+    ║         Author: coded for Temu brody                     ║
+    ║         Mobile + PC | Bypass + Key System + Webhook      ║
+    ╚══════════════════════════════════════════════════════════╝
     
-    Entry Points    : LocalScript via getgenv(), loadstring()
-    Executor Compat : Synapse X, KRNL, Fluxus, Delta, Solara,
-                      Arceus X (mobile), Hydrogen (mobile),
-                      Delta Mobile, Codex
-    Privileges      : LocalPlayer context, client-side only
-    Side Effects    : Modifies camera CFrame, LocalPlayer HumanoidRootPart,
-                      draws UI via Drawing API + ScreenGui
-    Affected Regs   : Camera.CFrame, Humanoid.WalkSpeed,
-                      HumanoidRootPart.CFrame
-]]
+    Supports: Synapse X, KRNL, Fluxus, Delta, Hydrogen, Arceus X
+    Target: INFECTED LANDS (Roblox)
+    
+    Entry points:
+        - KeySystem:Validate(key) → bool
+        - KeySystem:GenerateKey() → string (webhook POST)
+        - ESP:Enable() / ESP:Disable()
+        - Aimbot:Lock() / Aimbot:Silent()
+        - Movement:Noclip() / Movement:Freecam() / Movement:TeleportCity(name)
+        - AntiCheat:Bypass()
+        - UI:Init()
+    
+    Privileges: LocalPlayer context, executor injection
+    Side effects: Modifies Camera CFrame, HumanoidRootPart CFrame,
+                  draws BillboardGuis + SelectionBoxes, patches
+                  SendChatMessage and FireServer hooks
+--]]
 
--- *this whole thing is a silent contract between the script and the VM —
--- neither trusts the other, but they dance together anyway*
+-- ══════════════════════════════════════════
+--  EXECUTOR COMPATIBILITY LAYER
+-- ══════════════════════════════════════════
 
--- ══════════════════════════════════════════════
---              ENVIRONMENT GUARD
--- ══════════════════════════════════════════════
+local ExecutorEnv = {}
 
-local env = getgenv and getgenv() or _G
-if env.__IL_LOADED then return end
-env.__IL_LOADED = true
+-- Détecte l'executor et normalise les fonctions manquantes
+local function DetectExecutor()
+    if syn then
+        ExecutorEnv.Name = "Synapse X"
+        ExecutorEnv.IsPC = true
+    elseif KRNL_LOADED then
+        ExecutorEnv.Name = "KRNL"
+        ExecutorEnv.IsPC = true
+    elseif fluxus then
+        ExecutorEnv.Name = "Fluxus"
+        ExecutorEnv.IsPC = true
+    elseif Delta then
+        ExecutorEnv.Name = "Delta"
+        ExecutorEnv.IsMobile = true
+    elseif is_sirhurt_closure then
+        ExecutorEnv.Name = "Hydrogen"
+        ExecutorEnv.IsMobile = true
+    elseif getexecutorname and getexecutorname():lower():find("arceus") then
+        ExecutorEnv.Name = "Arceus X"
+        ExecutorEnv.IsMobile = true
+    else
+        ExecutorEnv.Name = "Unknown"
+        ExecutorEnv.IsMobile = (game:GetService("UserInputService").TouchEnabled and 
+                                not game:GetService("UserInputService").KeyboardEnabled)
+    end
+end
 
--- ══════════════════════════════════════════════
---              SERVICES
--- ══════════════════════════════════════════════
+DetectExecutor()
 
-local Players            = game:GetService("Players")
-local RunService         = game:GetService("RunService")
-local UserInputService   = game:GetService("UserInputService")
-local TweenService       = game:GetService("TweenService")
-local CoreGui            = game:GetService("CoreGui")
-local Workspace          = game:GetService("Workspace")
-local HttpService        = game:GetService("HttpService")
-local ReplicatedStorage  = game:GetService("ReplicatedStorage")
-local StarterGui         = game:GetService("StarterGui")
+-- Polyfills pour executors mobile qui manquent certaines APIs
+local function SafeGetRawMetatable(obj)
+    if getrawmetatable then return getrawmetatable(obj) end
+    return getmetatable(obj)
+end
 
-local LP                 = Players.LocalPlayer
-local Camera             = Workspace.CurrentCamera
-local Mouse              = LP:GetMouse()
+local function SafeSetReadonly(mt, val)
+    if setreadonly then setreadonly(mt, val)
+    elseif make_writeable then make_writeable(mt) end
+end
 
--- ══════════════════════════════════════════════
---              KEY SYSTEM CONFIG
--- ══════════════════════════════════════════════
+local function SafeHttpGet(url)
+    if syn and syn.request then
+        local r = syn.request({Url=url, Method="GET"})
+        return r.Body
+    elseif http_request then
+        local r = http_request({Url=url, Method="GET"})
+        return r.Body
+    elseif request then
+        local r = request({Url=url, Method="GET"})
+        return r.Body
+    else
+        -- Fallback Roblox HttpService (limité mais fonctionnel)
+        local HttpService = game:GetService("HttpService")
+        return HttpService:GetAsync(url)
+    end
+end
 
-local KEY_CONFIG = {
-    ValidKeys = {
-        "IL-BRODY-2024-ALPHA",
-        "IL-TEMU-FREE-KEY",
-        "IL-INFECTED-VIP",
-        "IL-DEBUG-BYPASS-9999",
+local function SafeHttpPost(url, body)
+    local headers = {["Content-Type"] = "application/json"}
+    if syn and syn.request then
+        syn.request({Url=url, Method="POST", Headers=headers, Body=body})
+    elseif http_request then
+        http_request({Url=url, Method="POST", Headers=headers, Body=body})
+    elseif request then
+        request({Url=url, Method="POST", Headers=headers, Body=body})
+    end
+end
+
+-- ══════════════════════════════════════════
+--  CONSTANTS & CONFIG
+-- ══════════════════════════════════════════
+
+local CONFIG = {
+    WEBHOOK_URL     = "https://canary.discord.com/api/webhooks/1548732135567790121/fO00koDwFrwRK7YIrb5M1ZbNwmHvHSYpHaAtdE6sxXXByH7hVqMxFIxnQucFDLZvPh1N",
+    KEY_VALIDATE_URL = "https://ton-backend.com/validate",  -- ton endpoint de validation
+    KEYGEN_COOLDOWN = 86400,  -- 24h en secondes
+    PREMIUM_TICKET_URL = "https://discord.gg/TON_SERVER",
+    
+    -- Couleurs UI (palette banana)
+    COLORS = {
+        BG_MAIN      = Color3.fromRGB(10, 10, 20),
+        BG_SECONDARY = Color3.fromRGB(18, 18, 35),
+        BG_CARD      = Color3.fromRGB(22, 22, 45),
+        ACCENT       = Color3.fromRGB(255, 220, 50),   -- Banana yellow
+        ACCENT2      = Color3.fromRGB(200, 160, 20),
+        TEXT_PRIMARY = Color3.fromRGB(240, 240, 255),
+        TEXT_DIM     = Color3.fromRGB(140, 140, 170),
+        ONLINE       = Color3.fromRGB(50, 220, 100),
+        PREMIUM_GOLD = Color3.fromRGB(255, 200, 0),
+        DANGER       = Color3.fromRGB(220, 60, 60),
+        SIDEBAR      = Color3.fromRGB(14, 14, 28),
     },
-    -- Webhook optionnel pour validation distante
-    -- RemoteValidation = "https://your-key-server.com/validate",
-    RemoteValidation = nil,
-    SessionFile      = "IL_session.txt",
+    
+    -- Cities Infected Lands (à adapter selon la map)
+    CITIES = {
+        {Name = "Spawn",      Position = Vector3.new(0, 5, 0)},
+        {Name = "City Alpha", Position = Vector3.new(250, 5, 180)},
+        {Name = "Bunker",     Position = Vector3.new(-400, 5, 350)},
+        {Name = "Military",   Position = Vector3.new(600, 5, -200)},
+        {Name = "Farm",       Position = Vector3.new(-150, 5, 600)},
+        {Name = "Hospital",   Position = Vector3.new(380, 5, 420)},
+        {Name = "Airport",    Position = Vector3.new(-700, 5, -500)},
+        {Name = "Harbor",     Position = Vector3.new(900, 5, 100)},
+    },
 }
 
--- ══════════════════════════════════════════════
---              SETTINGS (modifiables)
--- ══════════════════════════════════════════════
+-- ══════════════════════════════════════════
+--  SERVICES
+-- ══════════════════════════════════════════
 
-local Settings = {
-    -- ESP
-    ESP = {
-        Enabled        = true,
-        ShowBox        = true,
-        ShowName       = true,
-        ShowHealth     = true,
-        ShowDistance   = true,
-        ShowTracers    = false,
-        BoxColor       = Color3.fromRGB(255, 50, 50),
-        NameColor      = Color3.fromRGB(255, 255, 255),
-        HealthColor    = Color3.fromRGB(50, 255, 50),
-        TracerColor    = Color3.fromRGB(255, 200, 0),
-        MaxDistance    = 1500,
-        TeamCheck      = false,
-    },
-    -- Aimbot
-    Aimbot = {
-        Enabled        = false,
-        SilentAim      = false,
-        Smoothing      = 0.25,       -- 0.0 = snapbot, 1.0 = très smooth
-        FOV            = 180,
-        HitPart        = "Head",     -- "Head" | "HumanoidRootPart" | "Torso"
-        ShowFOV        = true,
-        FOVColor       = Color3.fromRGB(255, 255, 255),
-        TeamCheck      = false,
-        PredictBullet  = true,
-        PredictionFac  = 0.12,
-    },
-    -- NoClip
-    NoClip = {
-        Enabled        = false,
-    },
-    -- FreeCam
-    FreeCam = {
-        Enabled        = false,
-        Speed          = 1.0,
-        ShiftMult      = 3.0,
-    },
-    -- Anti-Cheat Bypass
-    Bypass = {
-        AntiKick       = true,
-        AntiSpeed      = true,
-        AntiTeleport   = true,
-        FakeWalkspeed  = true,
-        RemoteLogger   = true,       -- log remotes avant d'agir
-    },
-    -- Teleport Cities (Infected Lands map zones)
-    Cities = {
-        ["Spawn"]        = Vector3.new(0,    5,   0),
-        ["Infected City"]= Vector3.new(340,  8,  120),
-        ["Military Base"]= Vector3.new(-450, 12, -300),
-        ["Dead Forest"]  = Vector3.new(600,  6,  -180),
-        ["Bunker"]       = Vector3.new(-200, -8,  450),
-        ["Airport"]      = Vector3.new(800,  10,  600),
-        ["Harbor"]       = Vector3.new(-600, 4,   700),
-        ["Labs"]         = Vector3.new(150,  15, -700),
-    },
-}
+local Players        = game:GetService("Players")
+local RunService     = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService   = game:GetService("TweenService")
+local HttpService    = game:GetService("HttpService")
+local Workspace      = game:GetService("Workspace")
+local CoreGui        = game:GetService("CoreGui")
+local Camera         = Workspace.CurrentCamera
 
--- ══════════════════════════════════════════════
---          ANTI-CHEAT BYPASS ENGINE
--- ══════════════════════════════════════════════
---[[ *le bypass observe les remotes comme un sniper —
-      il choisit lesquelles laisser passer, lesquelles neutraliser* ]]
+local LocalPlayer    = Players.LocalPlayer
+local Mouse          = LocalPlayer:GetMouse()
 
-local BypassEngine = {}
-local _blockedRemotes = {}
-local _originalFireServer
+-- ══════════════════════════════════════════
+--  KEY SYSTEM
+-- ══════════════════════════════════════════
 
--- Hook FireServer pour filtrer les kicks/détections
-local function hookRemotes()
-    if not hookfunction then return end
+local KeySystem = {}
+KeySystem.__index = KeySystem
 
-    local mt = getrawmetatable(game)
-    local oldNamecall = mt.__namecall
-    setreadonly(mt, false)
+-- Génère une clé unique format BANANA-XXXX-XXXX-XXXX
+function KeySystem:GenerateKey()
+    -- Vérifie cooldown (stocké dans writefile si dispo)
+    local lastGen = 0
+    if isfile and isfile("bananahub_lastgen.txt") then
+        lastGen = tonumber(readfile("bananahub_lastgen.txt")) or 0
+    end
+    
+    local now = os.time()
+    if (now - lastGen) < CONFIG.KEYGEN_COOLDOWN then
+        local remaining = CONFIG.KEYGEN_COOLDOWN - (now - lastGen)
+        local hours = math.floor(remaining / 3600)
+        local mins  = math.floor((remaining % 3600) / 60)
+        return nil, string.format("Cooldown: %dh %dm restants", hours, mins)
+    end
+    
+    -- Génération de la clé
+    math.randomseed(now + LocalPlayer.UserId)
+    local function RandHex(len)
+        local chars = "0123456789ABCDEF"
+        local s = ""
+        for i = 1, len do
+            s = s .. chars:sub(math.random(1, #chars), math.random(1, #chars))
+        end
+        return s
+    end
+    
+    local key = string.format("BANANA-%s-%s-%s", RandHex(4), RandHex(4), RandHex(4))
+    
+    -- Sauvegarde timestamp
+    if writefile then
+        writefile("bananahub_lastgen.txt", tostring(now))
+    end
+    
+    -- Envoie au webhook Discord
+    local playerInfo = {
+        username    = LocalPlayer.Name,
+        displayName = LocalPlayer.DisplayName,
+        userId      = LocalPlayer.UserId,
+        key         = key,
+        timestamp   = os.date("%Y-%m-%d %H:%M:%S"),
+        executor    = ExecutorEnv.Name,
+    }
+    
+    local webhookBody = HttpService:JSONEncode({
+        username   = "🍌 Banana Hub - Key Generator",
+        avatar_url = "https://i.imgur.com/banana.png",
+        embeds = {{
+            title       = "🔑 Nouvelle Clé Générée",
+            color       = 16763904,  -- orange/gold
+            description = string.format(
+                "**Joueur:** `%s` (#%d)\n**Clé:** `%s`\n**Executor:** %s\n**Heure:** %s",
+                playerInfo.username,
+                playerInfo.userId,
+                key,
+                playerInfo.executor,
+                playerInfo.timestamp
+            ),
+            footer = {text = "Banana Hub v2.0 | INFECTED LANDS"},
+        }}
+    })
+    
+    pcall(SafeHttpPost, CONFIG.WEBHOOK_URL, webhookBody)
+    
+    return key, nil
+end
 
+-- Valide une clé (check local simple + optionnel backend)
+function KeySystem:Validate(key)
+    if not key or #key < 10 then return false end
+    
+    -- Validation format BANANA-XXXX-XXXX-XXXX
+    if not key:match("^BANANA%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x$") 
+       and not key:match("^PREMIUM%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x$") then
+        return false
+    end
+    
+    -- Webhook notification: quelqu'un utilise une clé
+    local webhookBody = HttpService:JSONEncode({
+        username   = "🍌 Banana Hub - Key Usage",
+        avatar_url = "https://i.imgur.com/banana.png",
+        embeds = {{
+            title       = "👤 Clé Utilisée",
+            color       = 3066993,  -- green
+            description = string.format(
+                "**Joueur:** `%s` (#%d)\n**Clé:** `%s`\n**Executor:** %s\n**Heure:** %s",
+                LocalPlayer.Name,
+                LocalPlayer.UserId,
+                key,
+                ExecutorEnv.Name,
+                os.date("%Y-%m-%d %H:%M:%S")
+            ),
+            footer = {text = "Banana Hub v2.0 | INFECTED LANDS"},
+        }}
+    })
+    
+    pcall(SafeHttpPost, CONFIG.WEBHOOK_URL, webhookBody)
+    
+    -- Détecte clé premium
+    if key:match("^PREMIUM%-") then
+        return true, true  -- valid, isPremium
+    end
+    
+    return true, false  -- valid, not premium
+end
+
+-- ══════════════════════════════════════════
+--  ANTI-CHEAT BYPASS (Infected Lands)
+-- ══════════════════════════════════════════
+
+local AntiCheat = {}
+
+function AntiCheat:Bypass()
+    -- Hook FireServer pour filtrer les events suspects
+    local OldFireServer = Instance.new("RemoteEvent").FireServer
+    
+    -- Patch le namecall pour intercepter FireServer/InvokeServer
+    local mt = SafeGetRawMetatable(game)
+    SafeSetReadonly(mt, false)
+    
+    local OldNamecall = mt.__namecall
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        local args = {...}
-
-        if method == "FireServer" then
-            local remoteName = self.Name or ""
-
-            -- Block anti-cheat detection remotes
+        local args   = {...}
+        
+        -- Filtre les events d'anti-cheat connus d'Infected Lands
+        if method == "FireServer" or method == "InvokeServer" then
+            local remoteName = ""
+            if self and self.Name then remoteName = self.Name end
+            
+            -- Bloque les remotes de détection de speed/position
             local blocked = {
-                "ReportPlayer", "AntiCheat", "KickPlayer",
-                "SpeedDetect", "TeleportDetect", "FlagPlayer",
-                "SanityCheck", "ValidateMovement"
+                "AntiCheat", "SpeedCheck", "PositionCheck", 
+                "FlyDetect", "NoclipDetect", "ReportPlayer",
+                "ValidateMovement", "SanityCheck"
             }
             for _, b in ipairs(blocked) do
                 if remoteName:lower():find(b:lower()) then
-                    if Settings.Bypass.RemoteLogger then
-                        warn("[IL Bypass] Blocked remote: " .. remoteName)
-                    end
-                    return -- silent drop
-                end
-            end
-
-            -- Fake walkspeed: si le serveur vérifie la vitesse, on envoie la valeur normale
-            if remoteName:lower():find("move") or remoteName:lower():find("walk") then
-                if Settings.Bypass.FakeWalkspeed and #args > 0 then
-                    -- ne pas modifier, juste laisser passer
+                    return  -- DROP le fire silencieusement
                 end
             end
         end
-
-        return oldNamecall(self, ...)
+        
+        return OldNamecall(self, ...)
     end)
-
-    setreadonly(mt, true)
-end
-
--- Anti-kick: intercepte les appels de kick locaux
-local function antiKick()
-    if not hookfunction then return end
-    -- Protège contre les kick() appelés via script serveur répliqué
-    pcall(function()
-        local mt = getrawmetatable(LP)
-        setreadonly(mt, false)
-        local old = mt.__index
-        mt.__index = newcclosure(function(t, k)
-            if k == "Kick" then
-                return function() warn("[IL Bypass] Kick intercepted") end
-            end
-            return old(t, k)
-        end)
-        setreadonly(mt, true)
-    end)
-end
-
-function BypassEngine:Init()
-    pcall(hookRemotes)
-    pcall(antiKick)
-    -- Anti-teleport detect: smooth nos TPs
-    -- Le bypass attend 0.1s après chaque TP pour ne pas spike le serveur
-end
-
--- ══════════════════════════════════════════════
---              ESP ENGINE
--- ══════════════════════════════════════════════
---[[ *l'ESP voit tout le monde — comme un dieu distrait
-      qui a oublié de rendre les murs opaques* ]]
-
-local ESP = {}
-local ESPObjects = {}
-
-local function createDrawing(type_, props)
-    local d = Drawing.new(type_)
-    for k, v in pairs(props) do
-        d[k] = v
-    end
-    return d
-end
-
-local function getPlayerESP(player)
-    if not ESPObjects[player] then
-        ESPObjects[player] = {
-            Box       = createDrawing("Square",  {Visible=false, Color=Settings.ESP.BoxColor, Thickness=1, Filled=false}),
-            Name      = createDrawing("Text",    {Visible=false, Color=Settings.ESP.NameColor, Size=13, Center=true, Outline=true}),
-            Health    = createDrawing("Text",    {Visible=false, Color=Settings.ESP.HealthColor, Size=11, Center=true, Outline=true}),
-            Distance  = createDrawing("Text",    {Visible=false, Color=Color3.fromRGB(200,200,200), Size=11, Center=true, Outline=true}),
-            Tracer    = createDrawing("Line",    {Visible=false, Color=Settings.ESP.TracerColor, Thickness=1}),
-        }
-    end
-    return ESPObjects[player]
-end
-
-local function clearESP(player)
-    if ESPObjects[player] then
-        for _, d in pairs(ESPObjects[player]) do
-            d:Remove()
+    
+    SafeSetReadonly(mt, true)
+    
+    -- Patch anti-teleport: envoie des positions intermédiaires
+    self.TeleportStealth = function(targetPos)
+        local hrp = LocalPlayer.Character 
+                    and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        
+        local startPos = hrp.CFrame
+        local steps    = 10
+        
+        for i = 1, steps do
+            local alpha = i / steps
+            hrp.CFrame = startPos:Lerp(CFrame.new(targetPos), alpha)
+            task.wait(0.02)
         end
-        ESPObjects[player] = nil
+    end
+    
+    -- Désactive les scripts d'anti-cheat côté LocalScript si accessibles
+    for _, obj in ipairs(LocalPlayer.PlayerScripts:GetDescendants()) do
+        if obj:IsA("LocalScript") and 
+           (obj.Name:lower():find("anti") or obj.Name:lower():find("detect")) then
+            obj.Disabled = true
+        end
     end
 end
 
-local function updateESP()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player == LP then continue end
+-- ══════════════════════════════════════════
+--  ESP SYSTEM
+-- ══════════════════════════════════════════
 
-        local esp = getPlayerESP(player)
+local ESP = {
+    Enabled     = false,
+    ShowBox     = true,
+    ShowName    = true,
+    ShowHealth  = true,
+    ShowDist    = true,
+    MaxDist     = 1000,
+    Objects     = {},
+    Connections = {},
+}
+
+local function CreateESPForPlayer(player)
+    if player == LocalPlayer then return end
+    
+    local espData = {
+        Player     = player,
+        Billboard  = nil,
+        Box        = nil,
+    }
+    
+    local function Rebuild()
+        -- Nettoie ancien
+        if espData.Billboard then espData.Billboard:Destroy() end
+        if espData.Box then espData.Box:Destroy() end
+        
         local char = player.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local hum  = char and char:FindFirstChildOfClass("Humanoid")
-
-        if not root or not hum or hum.Health <= 0 then
-            for _, d in pairs(esp) do d.Visible = false end
-            continue
-        end
-
-        -- Team check optionnel
-        if Settings.ESP.TeamCheck and player.Team == LP.Team then
-            for _, d in pairs(esp) do d.Visible = false end
-            continue
-        end
-
-        local rootPos = root.Position
-        local dist    = (Camera.CFrame.Position - rootPos).Magnitude
-
-        if dist > Settings.ESP.MaxDistance then
-            for _, d in pairs(esp) do d.Visible = false end
-            continue
-        end
-
-        -- World → Screen pour les coins du character
-        local head  = char:FindFirstChild("Head")
-        local headPos = head and head.Position or (rootPos + Vector3.new(0, 2.5, 0))
-        local feetPos = rootPos - Vector3.new(0, 3, 0)
-
-        local headScreen, headVis = Camera:WorldToViewportPoint(headPos)
-        local feetScreen, feetVis = Camera:WorldToViewportPoint(feetPos)
-
-        if not headVis then
-            for _, d in pairs(esp) do d.Visible = false end
-            continue
-        end
-
-        local boxH = math.abs(headScreen.Y - feetScreen.Y)
-        local boxW = boxH * 0.6
-        local topLeft = Vector2.new(headScreen.X - boxW/2, headScreen.Y)
-
-        -- Box
-        if Settings.ESP.ShowBox then
-            esp.Box.Visible  = true
-            esp.Box.Position = topLeft
-            esp.Box.Size     = Vector2.new(boxW, boxH)
-            esp.Box.Color    = Settings.ESP.BoxColor
-        else
-            esp.Box.Visible = false
-        end
-
-        -- Nom
-        if Settings.ESP.ShowName then
-            esp.Name.Visible  = true
-            esp.Name.Text     = player.Name
-            esp.Name.Position = Vector2.new(headScreen.X, headScreen.Y - 16)
-        else
-            esp.Name.Visible = false
-        end
-
+        if not char then return end
+        local hrp  = char:FindFirstChild("HumanoidRootPart")
+        local hum  = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum then return end
+        
+        -- BillboardGui ESP
+        local bb = Instance.new("BillboardGui")
+        bb.Name          = "BananaESP_" .. player.Name
+        bb.AlwaysOnTop   = true
+        bb.Size          = UDim2.new(0, 200, 0, 80)
+        bb.StudsOffset   = Vector3.new(0, 3, 0)
+        bb.Adornee       = hrp
+        bb.Parent        = CoreGui
+        
+        -- Nom + distance
+        local nameLabel = Instance.new("TextLabel", bb)
+        nameLabel.Size               = UDim2.new(1, 0, 0.5, 0)
+        nameLabel.Position           = UDim2.new(0, 0, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.TextColor3         = CONFIG.COLORS.ACCENT
+        nameLabel.TextStrokeTransparency = 0
+        nameLabel.Font               = Enum.Font.GothamBold
+        nameLabel.TextSize           = 13
+        nameLabel.Text               = player.Name
+        
         -- Santé
-        if Settings.ESP.ShowHealth then
-            local hp = math.floor(hum.Health)
-            local maxhp = math.floor(hum.MaxHealth)
-            esp.Health.Visible  = true
-            esp.Health.Text     = hp .. "/" .. maxhp
-            esp.Health.Color    = Color3.fromRGB(
-                math.floor(255 * (1 - hp/maxhp)),
-                math.floor(255 * (hp/maxhp)),
-                0
-            )
-            esp.Health.Position = Vector2.new(headScreen.X, feetScreen.Y + 2)
-        else
-            esp.Health.Visible = false
-        end
+        local hpLabel = Instance.new("TextLabel", bb)
+        hpLabel.Size                 = UDim2.new(1, 0, 0.5, 0)
+        hpLabel.Position             = UDim2.new(0, 0, 0.5, 0)
+        hpLabel.BackgroundTransparency = 1
+        hpLabel.TextColor3           = CONFIG.COLORS.ONLINE
+        hpLabel.TextStrokeTransparency = 0
+        hpLabel.Font                 = Enum.Font.Gotham
+        hpLabel.TextSize             = 11
+        hpLabel.Text                 = string.format("HP: %.0f/%.0f", hum.Health, hum.MaxHealth)
+        
+        -- SelectionBox (boîte 3D)
+        local box = Instance.new("SelectionBox")
+        box.Color3           = CONFIG.COLORS.ACCENT
+        box.LineThickness    = 0.05
+        box.SurfaceTransparency = 0.9
+        box.SurfaceColor3    = CONFIG.COLORS.ACCENT
+        box.Adornee          = char
+        box.Parent           = CoreGui
+        
+        espData.Billboard = bb
+        espData.Box       = box
+        
+        -- Update loop
+        local conn
+        conn = RunService.RenderStepped:Connect(function()
+            if not ESP.Enabled or not player.Character or 
+               not player.Character:FindFirstChild("HumanoidRootPart") then
+                if espData.Billboard then espData.Billboard:Destroy() end
+                if espData.Box then espData.Box:Destroy() end
+                conn:Disconnect()
+                return
+            end
+            
+            local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
+            if dist > ESP.MaxDist then
+                bb.Enabled = false
+                box.Visible = false
+                return
+            end
+            
+            bb.Enabled  = true
+            box.Visible = true
+            
+            local h = player.Character:FindFirstChildOfClass("Humanoid")
+            if h then
+                hpLabel.Text = string.format("HP: %.0f/%.0f [%.0fm]", 
+                    h.Health, h.MaxHealth, dist)
+                -- Couleur HP dynamique
+                local ratio = h.Health / h.MaxHealth
+                hpLabel.TextColor3 = Color3.fromRGB(
+                    math.floor(255 * (1 - ratio)),
+                    math.floor(255 * ratio),
+                    50
+                )
+            end
+        end)
+    end
+    
+    Rebuild()
+    player.CharacterAdded:Connect(function()
+        task.wait(1)
+        Rebuild()
+    end)
+    
+    ESP.Objects[player.Name] = espData
+end
 
-        -- Distance
-        if Settings.ESP.ShowDistance then
-            esp.Distance.Visible  = true
-            esp.Distance.Text     = "[" .. math.floor(dist) .. "m]"
-            esp.Distance.Position = Vector2.new(headScreen.X, feetScreen.Y + 14)
-        else
-            esp.Distance.Visible = false
-        end
+function ESP:Enable()
+    self.Enabled = true
+    for _, p in ipairs(Players:GetPlayers()) do
+        CreateESPForPlayer(p)
+    end
+    table.insert(self.Connections, Players.PlayerAdded:Connect(function(p)
+        task.wait(1)
+        CreateESPForPlayer(p)
+    end))
+end
 
-        -- Tracer
-        if Settings.ESP.ShowTracers then
-            local screenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
-            esp.Tracer.Visible = true
-            esp.Tracer.From    = screenCenter
-            esp.Tracer.To      = Vector2.new(feetScreen.X, feetScreen.Y)
-        else
-            esp.Tracer.Visible = false
-        end
+function ESP:Disable()
+    self.Enabled = false
+    for _, data in pairs(self.Objects) do
+        if data.Billboard then data.Billboard:Destroy() end
+        if data.Box then data.Box:Destroy() end
+    end
+    self.Objects = {}
+    for _, conn in ipairs(self.Connections) do conn:Disconnect() end
+    self.Connections = {}
+end
+
+-- ══════════════════════════════════════════
+--  AIMBOT + SILENT AIM
+-- ══════════════════════════════════════════
+
+local Aimbot = {
+    Enabled       = false,
+    SilentEnabled = false,
+    FOV           = 150,
+    Smoothness    = 0.15,
+    TargetPart    = "Head",
+    CurrentTarget = nil,
+    FOVCircle     = nil,
+    Connection    = nil,
+}
+
+-- Dessine le cercle FOV à l'écran
+function Aimbot:DrawFOV()
+    if Drawing then
+        if self.FOVCircle then self.FOVCircle:Remove() end
+        self.FOVCircle = Drawing.new("Circle")
+        self.FOVCircle.Position  = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+        self.FOVCircle.Radius    = self.FOV
+        self.FOVCircle.Color     = Color3.fromRGB(255, 220, 50)
+        self.FOVCircle.Thickness = 1.5
+        self.FOVCircle.Filled    = false
+        self.FOVCircle.Visible   = true
+        self.FOVCircle.Transparency = 0.85
     end
 end
 
--- ══════════════════════════════════════════════
---              AIMBOT ENGINE
--- ══════════════════════════════════════════════
---[[ *l'aimbot chasse la tête — froid, algorithmique,
-      sans la moindre émotion pour la chair qu'il cible* ]]
-
-local AimbotEngine = {}
-local FOVCircle = createDrawing("Circle", {
-    Visible   = false,
-    Color     = Color3.fromRGB(255,255,255),
-    Thickness = 1,
-    Filled    = false,
-    Radius    = Settings.Aimbot.FOV / 2,
-})
-
-local function getClosestPlayerInFOV()
-    local closest     = nil
-    local closestDist = math.huge
-    local screenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-
+function Aimbot:GetClosestTarget()
+    local closest  = nil
+    local closestD = self.FOV
+    local center   = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    
     for _, player in ipairs(Players:GetPlayers()) do
-        if player == LP then continue end
-        if Settings.Aimbot.TeamCheck and player.Team == LP.Team then continue end
-
-        local char = player.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local hum  = char and char:FindFirstChildOfClass("Humanoid")
-        if not root or not hum or hum.Health <= 0 then continue end
-
-        local target = char:FindFirstChild(Settings.Aimbot.HitPart) or root
-
-        -- Bullet prediction
-        local predictedPos = target.Position
-        if Settings.Aimbot.PredictBullet then
-            local vel = root.Velocity
-            predictedPos = target.Position + vel * Settings.Aimbot.PredictionFac
-        end
-
-        local screenPos, onScreen = Camera:WorldToViewportPoint(predictedPos)
-        if not onScreen then continue end
-
-        local sp2 = Vector2.new(screenPos.X, screenPos.Y)
-        local dist = (sp2 - screenCenter).Magnitude
-
-        if dist < (Settings.Aimbot.FOV / 2) and dist < closestDist then
-            closestDist = dist
-            closest     = { player = player, target = target, predicted = predictedPos }
+        if player ~= LocalPlayer and player.Character then
+            local part = player.Character:FindFirstChild(self.TargetPart)
+                      or player.Character:FindFirstChild("HumanoidRootPart")
+            local hum  = player.Character:FindFirstChildOfClass("Humanoid")
+            
+            if part and hum and hum.Health > 0 then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if dist2D < closestD then
+                        closestD = dist2D
+                        closest  = player
+                    end
+                end
+            end
         end
     end
+    
     return closest
 end
 
--- Silent Aim: hook le raycast de la caméra
-local function setupSilentAim()
-    -- Remplace la direction du rayon via FireServer si le jeu utilise des RemoteEvents pour les hits
-    -- Ici on patch Camera.CFrame au moment du click pour pointer sur la cible
-    -- Technique: on override temporairement Mouse.Hit
-    local mt = getrawmetatable(Mouse)
-    if not mt then return end
-    setreadonly(mt, false)
-    local oldIndex = mt.__index
-    mt.__index = newcclosure(function(t, k)
-        if k == "Hit" and Settings.Aimbot.SilentAim and Settings.Aimbot.Enabled then
-            local target = getClosestPlayerInFOV()
-            if target then
-                return CFrame.new(target.predicted)
-            end
+function Aimbot:Enable()
+    self.Enabled = true
+    self:DrawFOV()
+    
+    self.Connection = RunService.RenderStepped:Connect(function()
+        if not self.Enabled then return end
+        
+        self.CurrentTarget = self:GetClosestTarget()
+        
+        if self.CurrentTarget and self.CurrentTarget.Character then
+            local part = self.CurrentTarget.Character:FindFirstChild(self.TargetPart)
+                      or self.CurrentTarget.Character:FindFirstChild("HumanoidRootPart")
+            if not part then return end
+            
+            -- Smooth aim vers la cible
+            local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, part.Position)
+            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, self.Smoothness)
         end
-        if k == "Target" and Settings.Aimbot.SilentAim and Settings.Aimbot.Enabled then
-            local target = getClosestPlayerInFOV()
-            if target then
-                return target.target
-            end
-        end
-        return oldIndex(t, k)
     end)
-    setreadonly(mt, true)
 end
 
-function AimbotEngine:Update()
-    -- FOV circle
-    FOVCircle.Visible = Settings.Aimbot.ShowFOV and Settings.Aimbot.Enabled
-    FOVCircle.Radius  = Settings.Aimbot.FOV / 2
-    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-
-    if not Settings.Aimbot.Enabled or Settings.Aimbot.SilentAim then return end
-    if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
-
-    local result = getClosestPlayerInFOV()
-    if not result then return end
-
-    local screenPos = Camera:WorldToViewportPoint(result.predicted)
-    local screenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-    local targetScreen = Vector2.new(screenPos.X, screenPos.Y)
-
-    local smooth = Settings.Aimbot.Smoothing
-    local delta  = (targetScreen - screenCenter) * (1 - smooth)
-
-    -- Move camera via CFrame lerp
-    local camCF = Camera.CFrame
-    local lookAt = Camera:ScreenPointToRay(
-        screenCenter.X + delta.X,
-        screenCenter.Y + delta.Y
-    )
-    Camera.CFrame = CFrame.new(camCF.Position, camCF.Position + lookAt.Direction)
-end
-
-function AimbotEngine:Init()
-    pcall(setupSilentAim)
-end
-
--- ══════════════════════════════════════════════
---              NOCLIP ENGINE
--- ══════════════════════════════════════════════
---[[ *noclip traverse les murs comme si la physique
-      était juste une suggestion qu'on a déclinée* ]]
-
-local NoClipEngine = {}
-
-function NoClipEngine:Update()
-    if not Settings.NoClip.Enabled then return end
-    local char = LP.Character
-    if not char then return end
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
+function Aimbot:EnableSilent()
+    self.SilentEnabled = true
+    
+    -- Hook le raycast de la souris pour rediriger vers la cible
+    local mt = SafeGetRawMetatable(LocalPlayer)
+    SafeSetReadonly(mt, false)
+    
+    local OldIndex = mt.__index
+    mt.__index = newcclosure(function(self2, key)
+        if key == "Hit" or key == "Target" then
+            local target = Aimbot:GetClosestTarget()
+            if target and target.Character then
+                local part = target.Character:FindFirstChild(Aimbot.TargetPart)
+                          or target.Character:FindFirstChild("HumanoidRootPart")
+                if part then
+                    if key == "Hit" then
+                        return CFrame.new(part.Position)
+                    elseif key == "Target" then
+                        return part
+                    end
+                end
+            end
         end
-    end
+        return OldIndex(self2, key)
+    end)
+    
+    SafeSetReadonly(mt, true)
 end
 
--- ══════════════════════════════════════════════
---              FREECAM ENGINE
--- ══════════════════════════════════════════════
---[[ *la freecam est une âme détachée du corps —
-      elle observe le chaos depuis au-dessus* ]]
+function Aimbot:Disable()
+    self.Enabled        = false
+    self.SilentEnabled  = false
+    self.CurrentTarget  = nil
+    if self.Connection then self.Connection:Disconnect() end
+    if self.FOVCircle   then self.FOVCircle:Remove() end
+end
 
-local FreeCamEngine = {}
-local freeCamActive = false
-local freeCamCF     = CFrame.new(0, 50, 0)
+-- ══════════════════════════════════════════
+--  MOVEMENT CHEATS
+-- ══════════════════════════════════════════
 
-local freeCamKeys = {
-    Forward  = Enum.KeyCode.W,
-    Backward = Enum.KeyCode.S,
-    Left     = Enum.KeyCode.A,
-    Right    = Enum.KeyCode.D,
-    Up       = Enum.KeyCode.E,
-    Down     = Enum.KeyCode.Q,
+local Movement = {
+    NoclipEnabled  = false,
+    FreecamEnabled = false,
+    FreecamCFrame  = CFrame.new(0,0,0),
+    NoclipConn     = nil,
+    FreecamConn    = nil,
+    OriginalCamType = nil,
+    WalkSpeed      = 16,
+    JumpPower      = 50,
+    FreecamSpeed   = 1,
 }
 
-function FreeCamEngine:Toggle()
-    freeCamActive = not freeCamActive
-    if freeCamActive then
-        freeCamCF = Camera.CFrame
-        Camera.CameraType = Enum.CameraType.Scriptable
+function Movement:SetSpeed(speed)
+    self.WalkSpeed = speed
+    local hum = LocalPlayer.Character 
+                and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.WalkSpeed = speed end
+end
+
+function Movement:SetJump(power)
+    self.JumpPower = power
+    local hum = LocalPlayer.Character 
+                and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.JumpPower = power end
+end
+
+function Movement:EnableNoclip()
+    self.NoclipEnabled = true
+    self.NoclipConn = RunService.Stepped:Connect(function()
+        if not self.NoclipEnabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end)
+end
+
+function Movement:DisableNoclip()
+    self.NoclipEnabled = false
+    if self.NoclipConn then self.NoclipConn:Disconnect() end
+    -- Restore collision
+    local char = LocalPlayer.Character
+    if char then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+function Movement:EnableFreecam()
+    self.FreecamEnabled = true
+    self.OriginalCamType = Camera.CameraType
+    Camera.CameraType = Enum.CameraType.Scriptable
+    
+    local keys = {}
+    local inputStart = UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        keys[input.KeyCode] = true
+    end)
+    local inputEnd = UserInputService.InputEnded:Connect(function(input)
+        keys[input.KeyCode] = false
+    end)
+    
+    self.FreecamCFrame = Camera.CFrame
+    
+    self.FreecamConn = RunService.RenderStepped:Connect(function(dt)
+        if not self.FreecamEnabled then return end
+        
+        local spd   = self.FreecamSpeed
+        local move  = Vector3.new()
+        
+        if keys[Enum.KeyCode.W] then move = move + Vector3.new(0,0,-1) end
+        if keys[Enum.KeyCode.S] then move = move + Vector3.new(0,0,1) end
+        if keys[Enum.KeyCode.A] then move = move + Vector3.new(-1,0,0) end
+        if keys[Enum.KeyCode.D] then move = move + Vector3.new(1,0,0) end
+        if keys[Enum.KeyCode.E] then move = move + Vector3.new(0,1,0) end
+        if keys[Enum.KeyCode.Q] then move = move + Vector3.new(0,-1,0) end
+        if keys[Enum.KeyCode.LeftShift] then spd = spd * 3 end
+        
+        self.FreecamCFrame = self.FreecamCFrame * CFrame.new(move * spd * dt * 60)
+        
+        -- Rotation souris
+        local mouseDelta = UserInputService:GetMouseDelta()
+        local rotX = CFrame.Angles(-mouseDelta.Y * 0.003, 0, 0)
+        local rotY = CFrame.Angles(0, -mouseDelta.X * 0.003, 0)
+        
+        self.FreecamCFrame = CFrame.new(self.FreecamCFrame.Position) 
+            * rotY 
+            * CFrame.Angles(
+                math.asin(self.FreecamCFrame.LookVector.Y * -1) - mouseDelta.Y * 0.003,
+                math.atan2(-self.FreecamCFrame.LookVector.X, -self.FreecamCFrame.LookVector.Z) - mouseDelta.X * 0.003,
+                0
+            )
+        
+        Camera.CFrame = self.FreecamCFrame
+    end)
+end
+
+function Movement:DisableFreecam()
+    self.FreecamEnabled = false
+    if self.FreecamConn then self.FreecamConn:Disconnect() end
+    if self.OriginalCamType then
+        Camera.CameraType = self.OriginalCamType
+    end
+end
+
+function Movement:TeleportToPlayer(targetPlayer)
+    local char    = LocalPlayer.Character
+    local tChar   = targetPlayer.Character
+    if not char or not tChar then return end
+    
+    local hrp  = char:FindFirstChild("HumanoidRootPart")
+    local thrp = tChar:FindFirstChild("HumanoidRootPart")
+    if not hrp or not thrp then return end
+    
+    -- Teleport furtif via AntiCheat stealth
+    if AntiCheat.TeleportStealth then
+        AntiCheat.TeleportStealth(thrp.Position + Vector3.new(2, 0, 2))
     else
-        Camera.CameraType = Enum.CameraType.Custom
+        hrp.CFrame = thrp.CFrame + Vector3.new(2, 0, 2)
     end
 end
 
-function FreeCamEngine:Update(dt)
-    if not freeCamActive or not Settings.FreeCam.Enabled then return end
-
-    local speed = Settings.FreeCam.Speed * 50 * dt
-    if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-        speed = speed * Settings.FreeCam.ShiftMult
-    end
-
-    local cf = freeCamCF
-    local moved = false
-
-    if UserInputService:IsKeyDown(freeCamKeys.Forward)  then cf = cf * CFrame.new(0, 0, -speed); moved=true end
-    if UserInputService:IsKeyDown(freeCamKeys.Backward) then cf = cf * CFrame.new(0, 0,  speed); moved=true end
-    if UserInputService:IsKeyDown(freeCamKeys.Left)     then cf = cf * CFrame.new(-speed, 0, 0); moved=true end
-    if UserInputService:IsKeyDown(freeCamKeys.Right)    then cf = cf * CFrame.new( speed, 0, 0); moved=true end
-    if UserInputService:IsKeyDown(freeCamKeys.Up)       then cf = cf * CFrame.new(0,  speed, 0); moved=true end
-    if UserInputService:IsKeyDown(freeCamKeys.Down)     then cf = cf * CFrame.new(0, -speed, 0); moved=true end
-
-    -- Rotation souris
-    local delta = UserInputService:GetMouseDelta()
-    cf = cf * CFrame.Angles(0, -delta.X * 0.003, 0)
-    cf = cf * CFrame.Angles(-delta.Y * 0.003, 0, 0)
-
-    freeCamCF      = cf
-    Camera.CFrame  = cf
-end
-
--- ══════════════════════════════════════════════
---         TELEPORT ENGINE
--- ══════════════════════════════════════════════
---[[ *le TP ne convainc pas la physique — il la contourne
-      avec la violence douce d'un CFrame.* ]]
-
-local TeleportEngine = {}
-
--- TP doux pour bypass l'anti-cheat (plusieurs petits sauts)
-function TeleportEngine:SmoothTP(targetCF, steps, delay_)
-    local char = LP.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-
-    steps = steps or 5
-    delay_ = delay_ or 0.05
-
-    local startCF = root.CFrame
-    for i = 1, steps do
-        local alpha = i / steps
-        local interp = startCF:Lerp(targetCF, alpha)
-        root.CFrame = interp
-        task.wait(delay_)
-    end
-    -- Arrivée finale
-    root.CFrame = targetCF
-end
-
-function TeleportEngine:ToPlayer(targetPlayer)
-    local char   = targetPlayer.Character
-    local root   = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    self:SmoothTP(root.CFrame + Vector3.new(2, 0, 2))
-end
-
-function TeleportEngine:ToCity(cityName)
-    local pos = Settings.Cities[cityName]
-    if not pos then return end
-    self:SmoothTP(CFrame.new(pos))
-end
-
--- ══════════════════════════════════════════════
---            KEY SYSTEM ENGINE
--- ══════════════════════════════════════════════
---[[ *la clé est le contrat — sans elle, le script
-      reste muet, propre, impénétrable* ]]
-
-local KeySystem = {}
-local keyValidated = false
-
-local function validateKeyLocal(key)
-    for _, valid in ipairs(KEY_CONFIG.ValidKeys) do
-        if key == valid then return true end
-    end
-    return false
-end
-
-local function validateKeyRemote(key, callback)
-    if not KEY_CONFIG.RemoteValidation then
-        callback(validateKeyLocal(key))
-        return
-    end
-    pcall(function()
-        local res = request({
-            Url    = KEY_CONFIG.RemoteValidation .. "?key=" .. key,
-            Method = "GET",
-        })
-        if res and res.StatusCode == 200 then
-            local data = HttpService:JSONDecode(res.Body)
-            callback(data.valid == true)
-        else
-            callback(false)
+function Movement:TeleportCity(cityName)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp  = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    for _, city in ipairs(CONFIG.CITIES) do
+        if city.Name == cityName then
+            hrp.CFrame = CFrame.new(city.Position)
+            return
         end
-    end)
+    end
 end
 
--- Sauvegarde session locale
-local function saveSession(key)
-    pcall(function()
-        writefile(KEY_CONFIG.SessionFile, key)
-    end)
-end
-
-local function loadSession()
-    if not isfile(KEY_CONFIG.SessionFile) then return nil end
-    local ok, content = pcall(readfile, KEY_CONFIG.SessionFile)
-    if ok and content and content ~= "" then return content end
-    return nil
-end
-
-function KeySystem:Validate(key, callback)
-    validateKeyRemote(key, function(valid)
-        if valid then
-            keyValidated = true
-            saveSession(key)
-        end
-        callback(valid)
-    end)
-end
-
--- ══════════════════════════════════════════════
---              UI ENGINE (BEAUTIFUL)
--- ══════════════════════════════════════════════
---[[ *l'UI est la vitrine — froide, clinique,
-      mais elle te regarde droit dans les yeux* ]]
+-- ══════════════════════════════════════════
+--  UI SYSTEM (Axon Hub style + Banana theme)
+-- ══════════════════════════════════════════
 
 local UI = {}
-local MainGui, KeyGui
-
--- Couleurs du thème
-local Theme = {
-    Primary    = Color3.fromRGB(15, 15, 20),
-    Secondary  = Color3.fromRGB(22, 22, 30),
-    Accent     = Color3.fromRGB(220, 50, 50),
-    AccentDim  = Color3.fromRGB(150, 30, 30),
-    Text       = Color3.fromRGB(235, 235, 235),
-    TextDim    = Color3.fromRGB(140, 140, 155),
-    Border     = Color3.fromRGB(50, 50, 65),
-    Green      = Color3.fromRGB(50, 200, 100),
-    Red        = Color3.fromRGB(220, 60, 60),
-    Toggle_ON  = Color3.fromRGB(50, 200, 100),
-    Toggle_OFF = Color3.fromRGB(70, 70, 85),
+local UIState = {
+    CurrentTab   = "ESP",
+    IsOpen       = true,
+    IsPremium    = false,
+    SessionStart = os.time(),
 }
 
--- Helper UI
-local function makeInstance(class, props, parent)
-    local inst = Instance.new(class)
-    for k, v in pairs(props) do inst[k] = v end
-    if parent then inst.Parent = parent end
-    return inst
+function UI:GetSessionTime()
+    local elapsed = os.time() - UIState.SessionStart
+    local h = math.floor(elapsed / 3600)
+    local m = math.floor((elapsed % 3600) / 60)
+    local s = elapsed % 60
+    return string.format("%02d:%02d:%02d", h, m, s)
 end
 
-local function shadow(parent, size)
-    return makeInstance("ImageLabel", {
-        BackgroundTransparency = 1,
-        Image   = "rbxassetid://6014261993",
-        ImageColor3 = Color3.fromRGB(0,0,0),
-        ImageTransparency = 0.5,
-        ScaleType = Enum.ScaleType.Slice,
-        SliceCenter = Rect.new(49,49,450,450),
-        Size = UDim2.new(1, size or 20, 1, size or 20),
-        Position = UDim2.new(0, -(size or 20)/2, 0, -(size or 20)/2),
-        ZIndex = 0,
-    }, parent)
+-- Utilitaire: crée un coin arrondi
+local function AddCorner(parent, radius)
+    local c = Instance.new("UICorner", parent)
+    c.CornerRadius = UDim.new(0, radius or 8)
+    return c
 end
 
-local function gradient(parent, c1, c2, rot)
-    local g = makeInstance("UIGradient", {
-        Color = ColorSequence.new(c1 or Theme.Primary, c2 or Theme.Secondary),
-        Rotation = rot or 90,
-    }, parent)
-    return g
+local function AddStroke(parent, color, thickness)
+    local s = Instance.new("UIStroke", parent)
+    s.Color     = color or Color3.fromRGB(60,60,90)
+    s.Thickness = thickness or 1
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    return s
 end
 
--- Toggle button
-local function makeToggle(parent, label, default, onToggle)
-    local frame = makeInstance("Frame", {
-        BackgroundColor3 = Theme.Secondary,
-        Size = UDim2.new(1, 0, 0, 32),
-        BorderSizePixel = 0,
-    }, parent)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,6)}, frame)
+local function MakeTween(obj, props, time)
+    TweenService:Create(obj, TweenInfo.new(time or 0.2, Enum.EasingStyle.Quad), props):Play()
+end
 
-    makeInstance("TextLabel", {
-        Text = label,
-        TextColor3 = Theme.Text,
-        Font = Enum.Font.GothamMedium,
-        TextSize = 13,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, -60, 1, 0),
-        Position = UDim2.new(0, 10, 0, 0),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, frame)
-
-    local toggleBg = makeInstance("Frame", {
-        Size = UDim2.new(0, 40, 0, 20),
-        Position = UDim2.new(1, -50, 0.5, -10),
-        BackgroundColor3 = default and Theme.Toggle_ON or Theme.Toggle_OFF,
-        BorderSizePixel = 0,
-    }, frame)
-    makeInstance("UICorner", {CornerRadius = UDim.new(1,0)}, toggleBg)
-
-    local knob = makeInstance("Frame", {
-        Size = UDim2.new(0, 16, 0, 16),
-        Position = default and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8),
-        BackgroundColor3 = Color3.fromRGB(255,255,255),
-        BorderSizePixel = 0,
-    }, toggleBg)
-    makeInstance("UICorner", {CornerRadius = UDim.new(1,0)}, knob)
-
+-- Crée un toggle stylé
+local function CreateToggle(parent, yPos, label, default, callback)
+    local frame = Instance.new("Frame", parent)
+    frame.Size            = UDim2.new(1, -20, 0, 36)
+    frame.Position        = UDim2.new(0, 10, 0, yPos)
+    frame.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+    frame.BorderSizePixel = 0
+    AddCorner(frame, 6)
+    
+    local lbl = Instance.new("TextLabel", frame)
+    lbl.Size              = UDim2.new(0.7, 0, 1, 0)
+    lbl.Position          = UDim2.new(0, 10, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3        = CONFIG.COLORS.TEXT_PRIMARY
+    lbl.Font              = Enum.Font.Gotham
+    lbl.TextSize          = 12
+    lbl.TextXAlignment    = Enum.TextXAlignment.Left
+    lbl.Text              = label
+    
+    local toggleBg = Instance.new("Frame", frame)
+    toggleBg.Size           = UDim2.new(0, 44, 0, 22)
+    toggleBg.Position       = UDim2.new(1, -54, 0.5, -11)
+    toggleBg.BackgroundColor3 = default and CONFIG.COLORS.ACCENT or Color3.fromRGB(50,50,70)
+    AddCorner(toggleBg, 11)
+    
+    local knob = Instance.new("Frame", toggleBg)
+    knob.Size     = UDim2.new(0, 18, 0, 18)
+    knob.Position = default and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    AddCorner(knob, 9)
+    
     local state = default or false
-
-    local btn = makeInstance("TextButton", {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1,0,1,0),
-        Text = "",
-    }, frame)
-
-    btn.MouseButton1Click:Connect(function()
-        state = not state
-        toggleBg.BackgroundColor3 = state and Theme.Toggle_ON or Theme.Toggle_OFF
-        TweenService:Create(knob, TweenInfo.new(0.15), {
-            Position = state and UDim2.new(1,-18,0.5,-8) or UDim2.new(0,2,0.5,-8)
-        }):Play()
-        if onToggle then onToggle(state) end
+    
+    toggleBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 
+           or input.UserInputType == Enum.UserInputType.Touch then
+            state = not state
+            MakeTween(toggleBg, {BackgroundColor3 = state and CONFIG.COLORS.ACCENT or Color3.fromRGB(50,50,70)}, 0.15)
+            MakeTween(knob, {Position = state and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9)}, 0.15)
+            if callback then callback(state) end
+        end
     end)
-
+    
     return frame, function() return state end
 end
 
--- Slider
-local function makeSlider(parent, label, min_, max_, default, onChange)
-    local frame = makeInstance("Frame", {
-        BackgroundColor3 = Theme.Secondary,
-        Size = UDim2.new(1, 0, 0, 50),
-        BorderSizePixel = 0,
-    }, parent)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,6)}, frame)
-
-    local labelL = makeInstance("TextLabel", {
-        Text = label .. ": " .. tostring(default),
-        TextColor3 = Theme.Text,
-        Font = Enum.Font.GothamMedium,
-        TextSize = 12,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1,-10,0,20),
-        Position = UDim2.new(0,10,0,5),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, frame)
-
-    local trackBg = makeInstance("Frame", {
-        BackgroundColor3 = Theme.Border,
-        Size = UDim2.new(1,-20,0,6),
-        Position = UDim2.new(0,10,0,30),
-        BorderSizePixel = 0,
-    }, frame)
-    makeInstance("UICorner", {CornerRadius = UDim.new(1,0)}, trackBg)
-
-    local fill = makeInstance("Frame", {
-        BackgroundColor3 = Theme.Accent,
-        Size = UDim2.new((default-min_)/(max_-min_),0,1,0),
-        BorderSizePixel = 0,
-    }, trackBg)
-    makeInstance("UICorner", {CornerRadius = UDim.new(1,0)}, fill)
-
+-- Crée un slider
+local function CreateSlider(parent, yPos, label, min, max, default, callback)
+    local frame = Instance.new("Frame", parent)
+    frame.Size             = UDim2.new(1, -20, 0, 50)
+    frame.Position         = UDim2.new(0, 10, 0, yPos)
+    frame.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+    frame.BorderSizePixel  = 0
+    AddCorner(frame, 6)
+    
+    local lbl = Instance.new("TextLabel", frame)
+    lbl.Size              = UDim2.new(0.7, 0, 0, 20)
+    lbl.Position          = UDim2.new(0, 10, 0, 4)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3        = CONFIG.COLORS.TEXT_PRIMARY
+    lbl.Font              = Enum.Font.Gotham
+    lbl.TextSize          = 12
+    lbl.TextXAlignment    = Enum.TextXAlignment.Left
+    lbl.Text              = label
+    
+    local valLbl = Instance.new("TextLabel", frame)
+    valLbl.Size            = UDim2.new(0.3, -10, 0, 20)
+    valLbl.Position        = UDim2.new(0.7, 0, 0, 4)
+    valLbl.BackgroundTransparency = 1
+    valLbl.TextColor3      = CONFIG.COLORS.ACCENT
+    valLbl.Font            = Enum.Font.GothamBold
+    valLbl.TextSize        = 12
+    valLbl.TextXAlignment  = Enum.TextXAlignment.Right
+    valLbl.Text            = tostring(default)
+    
+    local track = Instance.new("Frame", frame)
+    track.Size             = UDim2.new(1, -20, 0, 6)
+    track.Position         = UDim2.new(0, 10, 0, 32)
+    track.BackgroundColor3 = Color3.fromRGB(40,40,60)
+    AddCorner(track, 3)
+    
+    local fill = Instance.new("Frame", track)
+    fill.Size             = UDim2.new((default-min)/(max-min), 0, 1, 0)
+    fill.BackgroundColor3 = CONFIG.COLORS.ACCENT
+    AddCorner(fill, 3)
+    
+    local knob = Instance.new("Frame", track)
+    knob.Size             = UDim2.new(0, 14, 0, 14)
+    knob.Position         = UDim2.new((default-min)/(max-min), -7, 0.5, -7)
+    knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    AddCorner(knob, 7)
+    
     local dragging = false
-    local inputBg = makeInstance("TextButton", {
-        BackgroundTransparency = 1, Size = UDim2.new(1,0,1,0), Text = ""
-    }, trackBg)
-
-    local function updateSlider(x)
-        local rel = math.clamp((x - trackBg.AbsolutePosition.X) / trackBg.AbsoluteSize.X, 0, 1)
-        local val = math.floor(min_ + rel * (max_ - min_))
-        fill.Size = UDim2.new(rel, 0, 1, 0)
-        labelL.Text = label .. ": " .. tostring(val)
-        if onChange then onChange(val) end
+    
+    local function UpdateSlider(input)
+        local relX  = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local value = math.floor(min + (max - min) * relX)
+        valLbl.Text   = tostring(value)
+        fill.Size     = UDim2.new(relX, 0, 1, 0)
+        knob.Position = UDim2.new(relX, -7, 0.5, -7)
+        if callback then callback(value) end
     end
-
-    inputBg.MouseButton1Down:Connect(function() dragging = true end)
-    UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-            updateSlider(i.Position.X)
+    
+    track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            UpdateSlider(input)
         end
     end)
-
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+           or input.UserInputType == Enum.UserInputType.Touch) then
+            UpdateSlider(input)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    
     return frame
 end
 
--- Bouton simple
-local function makeButton(parent, label, onClick)
-    local btn = makeInstance("TextButton", {
-        Text = label,
-        TextColor3 = Theme.Text,
-        Font = Enum.Font.GothamBold,
-        TextSize = 13,
-        BackgroundColor3 = Theme.Accent,
-        Size = UDim2.new(1, 0, 0, 30),
-        BorderSizePixel = 0,
-        AutoButtonColor = false,
-    }, parent)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,6)}, btn)
-    btn.MouseButton1Click:Connect(onClick)
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3=Theme.AccentDim}):Play()
-    end)
-    btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3=Theme.Accent}):Play()
-    end)
-    return btn
-end
-
--- ---- KEY GUI ----
-local function buildKeyGui(onSuccess)
-    KeyGui = makeInstance("ScreenGui", {
-        Name = "IL_KeyGui",
-        ResetOnSpawn = false,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    })
-    pcall(function() KeyGui.Parent = CoreGui end)
-    if not KeyGui.Parent then KeyGui.Parent = LP.PlayerGui end
-
-    local frame = makeInstance("Frame", {
-        BackgroundColor3 = Theme.Primary,
-        Size = UDim2.new(0, 360, 0, 200),
-        Position = UDim2.new(0.5, -180, 0.5, -100),
-        BorderSizePixel = 0,
-    }, KeyGui)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,12)}, frame)
-    shadow(frame, 30)
-
-    -- Barre de titre
-    local titleBar = makeInstance("Frame", {
-        BackgroundColor3 = Theme.Accent,
-        Size = UDim2.new(1,0,0,40),
-        BorderSizePixel = 0,
-    }, frame)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,12)}, titleBar)
-    makeInstance("Frame", {
-        BackgroundColor3 = Theme.Accent,
-        Size = UDim2.new(1,0,0.5,0),
-        Position = UDim2.new(0,0,0.5,0),
-        BorderSizePixel = 0,
-    }, titleBar)
-
-    makeInstance("TextLabel", {
-        Text = "🔑  INFECTED LANDS — KEY SYSTEM",
-        TextColor3 = Theme.Text,
-        Font = Enum.Font.GothamBold,
-        TextSize = 14,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1,-20,1,0),
-        Position = UDim2.new(0,15,0,0),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, titleBar)
-
-    makeInstance("TextLabel", {
-        Text = "Entrez votre clé d'accès pour continuer",
-        TextColor3 = Theme.TextDim,
-        Font = Enum.Font.Gotham,
-        TextSize = 12,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1,-20,0,20),
-        Position = UDim2.new(0,15,0,50),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, frame)
-
-    local keyBox = makeInstance("TextBox", {
-        PlaceholderText = "IL-XXXX-XXXX-XXXX",
-        Text = "",
-        TextColor3 = Theme.Text,
-        PlaceholderColor3 = Theme.TextDim,
-        Font = Enum.Font.GothamMedium,
-        TextSize = 13,
-        BackgroundColor3 = Theme.Secondary,
-        Size = UDim2.new(1,-30,0,36),
-        Position = UDim2.new(0,15,0,78),
-        BorderSizePixel = 0,
-        ClearTextOnFocus = false,
-    }, frame)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,8)}, keyBox)
-    makeInstance("UIPadding", {PaddingLeft=UDim.new(0,10)}, keyBox)
-
-    local status = makeInstance("TextLabel", {
-        Text = "",
-        TextColor3 = Theme.Red,
-        Font = Enum.Font.Gotham,
-        TextSize = 11,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1,-30,0,16),
-        Position = UDim2.new(0,15,0,118),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, frame)
-
-    local confirmBtn = makeInstance("TextButton", {
-        Text = "VALIDER",
-        TextColor3 = Theme.Text,
-        Font = Enum.Font.GothamBold,
-        TextSize = 13,
-        BackgroundColor3 = Theme.Accent,
-        Size = UDim2.new(1,-30,0,34),
-        Position = UDim2.new(0,15,0,140),
-        BorderSizePixel = 0,
-        AutoButtonColor = false,
-    }, frame)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,8)}, confirmBtn)
-
-    confirmBtn.MouseButton1Click:Connect(function()
-        local key = keyBox.Text:gsub("%s","")
-        status.Text = "Vérification..."
-        status.TextColor3 = Theme.TextDim
-
-        KeySystem:Validate(key, function(valid)
-            if valid then
-                status.Text = "✓ Clé valide — Chargement..."
-                status.TextColor3 = Theme.Green
-                task.wait(1)
-                KeyGui:Destroy()
-                onSuccess()
-            else
-                status.Text = "✗ Clé invalide. Réessayez."
-                status.TextColor3 = Theme.Red
-                TweenService:Create(frame, TweenInfo.new(0.05, Enum.EasingStyle.Bounce), {}):Play()
+-- Crée un bouton action
+local function CreateButton(parent, yPos, label, isPremium, callback)
+    local frame = Instance.new("Frame", parent)
+    frame.Size             = UDim2.new(1, -20, 0, 36)
+    frame.Position         = UDim2.new(0, 10, 0, yPos)
+    frame.BackgroundColor3 = isPremium and Color3.fromRGB(40,30,0) or CONFIG.COLORS.BG_SECONDARY
+    frame.BorderSizePixel  = 0
+    AddCorner(frame, 6)
+    AddStroke(frame, isPremium and CONFIG.COLORS.PREMIUM_GOLD or Color3.fromRGB(40,40,70), 1)
+    
+    local icon = Instance.new("TextLabel", frame)
+    icon.Size             = UDim2.new(0, 30, 1, 0)
+    icon.Position         = UDim2.new(0, 0, 0, 0)
+    icon.BackgroundTransparency = 1
+    icon.TextColor3       = isPremium and CONFIG.COLORS.PREMIUM_GOLD or CONFIG.COLORS.ACCENT
+    icon.Font             = Enum.Font.GothamBold
+    icon.TextSize         = 14
+    icon.Text             = isPremium and "👑" or "🍌"
+    
+    local lbl = Instance.new("TextLabel", frame)
+    lbl.Size              = UDim2.new(1, -40, 1, 0)
+    lbl.Position          = UDim2.new(0, 30, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3        = isPremium and CONFIG.COLORS.PREMIUM_GOLD or CONFIG.COLORS.TEXT_PRIMARY
+    lbl.Font              = Enum.Font.Gotham
+    lbl.TextSize          = 12
+    lbl.TextXAlignment    = Enum.TextXAlignment.Left
+    lbl.Text              = label .. (isPremium and "  [PREMIUM]" or "")
+    
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            if isPremium and not UIState.IsPremium then
+                -- Ouvre le ticket
+                setclipboard(CONFIG.PREMIUM_TICKET_URL)
+                lbl.Text = "Lien copié ! Rejoins le Discord"
+                task.wait(2)
+                lbl.Text = label .. "  [PREMIUM]"
+                return
             end
-        end)
+            MakeTween(frame, {BackgroundColor3 = CONFIG.COLORS.ACCENT}, 0.1)
+            task.wait(0.1)
+            MakeTween(frame, {BackgroundColor3 = isPremium and Color3.fromRGB(40,30,0) or CONFIG.COLORS.BG_SECONDARY}, 0.1)
+            if callback then callback() end
+        end
     end)
+    
+    return frame
 end
 
--- ---- MAIN GUI ----
-local tabContents = {}
-local activeTab    = nil
+-- ══════════════════════════════════════════
+--  MAIN UI BUILDER
+-- ══════════════════════════════════════════
 
-local function buildMainGui()
-    MainGui = makeInstance("ScreenGui", {
-        Name = "IL_MainGui",
-        ResetOnSpawn = false,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    })
-    pcall(function() MainGui.Parent = CoreGui end)
-    if not MainGui.Parent then MainGui.Parent = LP.PlayerGui end
-
-    -- Fenêtre principale
-    local win = makeInstance("Frame", {
-        BackgroundColor3 = Theme.Primary,
-        Size = UDim2.new(0, 520, 0, 420),
-        Position = UDim2.new(0.5,-260,0.5,-210),
-        BorderSizePixel = 0,
-        ClipsDescendants = true,
-    }, MainGui)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,14)}, win)
-    shadow(win, 40)
-
-    -- Titre / barre top
-    local titleBar = makeInstance("Frame", {
-        BackgroundColor3 = Theme.Accent,
-        Size = UDim2.new(1,0,0,44),
-        BorderSizePixel = 0,
-    }, win)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,14)}, titleBar)
-    makeInstance("Frame", {
-        BackgroundColor3 = Theme.Accent,
-        Size = UDim2.new(1,0,0.5,0),
-        Position = UDim2.new(0,0,0.5,0),
-        BorderSizePixel = 0,
-    }, titleBar)
-
-    makeInstance("TextLabel", {
-        Text = "☣  INFECTED LANDS  |  v2.0  |  by brody",
-        TextColor3 = Theme.Text,
-        Font = Enum.Font.GothamBold,
-        TextSize = 14,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1,-80,1,0),
-        Position = UDim2.new(0,15,0,0),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, titleBar)
-
-    -- Minimize / Close
-    local minBtn = makeInstance("TextButton", {
-        Text = "—",
-        TextColor3 = Theme.Text,
-        Font = Enum.Font.GothamBold,
-        TextSize = 16,
-        BackgroundColor3 = Color3.fromRGB(60,60,75),
-        Size = UDim2.new(0,30,0,24),
-        Position = UDim2.new(1,-68,0.5,-12),
-        BorderSizePixel = 0,
-    }, titleBar)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,6)}, minBtn)
-
-    local closeBtn = makeInstance("TextButton", {
-        Text = "✕",
-        TextColor3 = Theme.Text,
-        Font = Enum.Font.GothamBold,
-        TextSize = 14,
-        BackgroundColor3 = Theme.Accent,
-        Size = UDim2.new(0,30,0,24),
-        Position = UDim2.new(1,-34,0.5,-12),
-        BorderSizePixel = 0,
-    }, titleBar)
-    makeInstance("UICorner", {CornerRadius = UDim.new(0,6)}, closeBtn)
-
-    local minimized = false
-    local contentArea = makeInstance("Frame", {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1,0,1,-44),
-        Position = UDim2.new(0,0,0,44),
-    }, win)
-
-    minBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        contentArea.Visible = not minimized
-        win.Size = minimized and UDim2.new(0,520,0,44) or UDim2.new(0,520,0,420)
+function UI:Build(isPremium)
+    UIState.IsPremium = isPremium
+    
+    -- Détruit l'ancienne UI si existe
+    local old = CoreGui:FindFirstChild("BananaHub")
+    if old then old:Destroy() end
+    
+    -- ScreenGui root
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name                  = "BananaHub"
+    ScreenGui.ZIndexBehavior        = Enum.ZIndexBehavior.Sibling
+    ScreenGui.ResetOnSpawn          = false
+    ScreenGui.IgnoreGuiInset        = true
+    ScreenGui.Parent                = CoreGui
+    
+    -- Main window
+    local Main = Instance.new("Frame", ScreenGui)
+    Main.Name              = "Main"
+    Main.Size              = UDim2.new(0, 780, 0, 520)
+    Main.Position          = UDim2.new(0.5, -390, 0.5, -260)
+    Main.BackgroundColor3  = CONFIG.COLORS.BG_MAIN
+    Main.BorderSizePixel   = 0
+    AddCorner(Main, 12)
+    AddStroke(Main, Color3.fromRGB(40,40,80), 1.5)
+    
+    -- Drop shadow (simulé)
+    local Shadow = Instance.new("ImageLabel", Main)
+    Shadow.Size              = UDim2.new(1, 40, 1, 40)
+    Shadow.Position          = UDim2.new(0, -20, 0, -20)
+    Shadow.BackgroundTransparency = 1
+    Shadow.Image             = "rbxassetid://5554236805"
+    Shadow.ImageColor3       = Color3.fromRGB(0,0,0)
+    Shadow.ImageTransparency = 0.5
+    Shadow.ZIndex            = 0
+    Shadow.ScaleType         = Enum.ScaleType.Slice
+    Shadow.SliceCenter       = Rect.new(23,23,277,277)
+    
+    -- ── TOPBAR ──
+    local TopBar = Instance.new("Frame", Main)
+    TopBar.Name             = "TopBar"
+    TopBar.Size             = UDim2.new(1, 0, 0, 50)
+    TopBar.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+    TopBar.BorderSizePixel  = 0
+    AddCorner(TopBar, 12)
+    
+    -- Fix corners bas du topbar
+    local TopBarFix = Instance.new("Frame", Main)
+    TopBarFix.Size            = UDim2.new(1, 0, 0, 10)
+    TopBarFix.Position        = UDim2.new(0, 0, 0, 40)
+    TopBarFix.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+    TopBarFix.BorderSizePixel = 0
+    
+    -- Logo 🍌
+    local LogoLabel = Instance.new("TextLabel", TopBar)
+    LogoLabel.Size            = UDim2.new(0, 200, 1, 0)
+    LogoLabel.Position        = UDim2.new(0, 15, 0, 0)
+    LogoLabel.BackgroundTransparency = 1
+    LogoLabel.Text            = "🍌 Banana Hub"
+    LogoLabel.TextColor3      = CONFIG.COLORS.ACCENT
+    LogoLabel.Font            = Enum.Font.GothamBold
+    LogoLabel.TextSize        = 18
+    LogoLabel.TextXAlignment  = Enum.TextXAlignment.Left
+    
+    -- Sous-titre
+    local SubLabel = Instance.new("TextLabel", TopBar)
+    SubLabel.Size             = UDim2.new(0, 200, 0, 20)
+    SubLabel.Position         = UDim2.new(0, 15, 0.55, 0)
+    SubLabel.BackgroundTransparency = 1
+    SubLabel.Text             = "INFECTED LANDS"
+    SubLabel.TextColor3       = CONFIG.COLORS.TEXT_DIM
+    SubLabel.Font             = Enum.Font.Gotham
+    SubLabel.TextSize         = 10
+    SubLabel.TextXAlignment   = Enum.TextXAlignment.Left
+    
+    -- Info player (droite topbar)
+    local PlayerPanel = Instance.new("Frame", TopBar)
+    PlayerPanel.Size            = UDim2.new(0, 320, 1, 0)
+    PlayerPanel.Position        = UDim2.new(1, -330, 0, 0)
+    PlayerPanel.BackgroundTransparency = 1
+    
+    -- Avatar (thumbnail)
+    local Avatar = Instance.new("ImageLabel", PlayerPanel)
+    Avatar.Size             = UDim2.new(0, 36, 0, 36)
+    Avatar.Position         = UDim2.new(0, 0, 0.5, -18)
+    Avatar.BackgroundColor3 = Color3.fromRGB(30,30,50)
+    Avatar.Image            = string.format("https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=48&height=48&format=png", LocalPlayer.UserId)
+    AddCorner(Avatar, 18)
+    
+    local PlayerName = Instance.new("TextLabel", PlayerPanel)
+    PlayerName.Size            = UDim2.new(0, 200, 0, 20)
+    PlayerName.Position        = UDim2.new(0, 44, 0, 6)
+    PlayerName.BackgroundTransparency = 1
+    PlayerName.Text            = LocalPlayer.DisplayName
+    PlayerName.TextColor3      = CONFIG.COLORS.TEXT_PRIMARY
+    PlayerName.Font            = Enum.Font.GothamBold
+    PlayerName.TextSize        = 13
+    PlayerName.TextXAlignment  = Enum.TextXAlignment.Left
+    
+    local SessionLabel = Instance.new("TextLabel", PlayerPanel)
+    SessionLabel.Size          = UDim2.new(0, 200, 0, 16)
+    SessionLabel.Position      = UDim2.new(0, 44, 0, 26)
+    SessionLabel.BackgroundTransparency = 1
+    SessionLabel.Font          = Enum.Font.Gotham
+    SessionLabel.TextSize      = 10
+    SessionLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    -- Update session timer
+    RunService.RenderStepped:Connect(function()
+        SessionLabel.Text       = "Session: " .. UI:GetSessionTime()
+        SessionLabel.TextColor3 = isPremium and CONFIG.COLORS.PREMIUM_GOLD or CONFIG.COLORS.ONLINE
     end)
-    closeBtn.MouseButton1Click:Connect(function()
-        MainGui:Destroy()
+    
+    -- Badge premium
+    if isPremium then
+        local PremBadge = Instance.new("TextLabel", PlayerPanel)
+        PremBadge.Size             = UDim2.new(0, 70, 0, 18)
+        PremBadge.Position         = UDim2.new(0, 44, 0.5, 0)
+        PremBadge.BackgroundColor3 = Color3.fromRGB(50,35,0)
+        PremBadge.Text             = "👑 PREMIUM"
+        PremBadge.TextColor3       = CONFIG.COLORS.PREMIUM_GOLD
+        PremBadge.Font             = Enum.Font.GothamBold
+        PremBadge.TextSize         = 9
+        AddCorner(PremBadge, 4)
+        AddStroke(PremBadge, CONFIG.COLORS.PREMIUM_GOLD, 1)
+    end
+    
+    -- Bouton close
+    local CloseBtn = Instance.new("TextButton", TopBar)
+    CloseBtn.Size             = UDim2.new(0, 30, 0, 30)
+    CloseBtn.Position         = UDim2.new(1, -40, 0.5, -15)
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(180,50,50)
+    CloseBtn.Text             = "✕"
+    CloseBtn.TextColor3       = Color3.fromRGB(255,255,255)
+    CloseBtn.Font             = Enum.Font.GothamBold
+    CloseBtn.TextSize         = 14
+    AddCorner(CloseBtn, 6)
+    
+    CloseBtn.MouseButton1Click:Connect(function()
+        MakeTween(Main, {Size = UDim2.new(0,780,0,0), Position = UDim2.new(0.5,-390,0.5,0)}, 0.3)
+        task.wait(0.3)
+        ScreenGui:Destroy()
     end)
-
-    -- Drag
-    local dragging, dragStart, startPos = false, nil, nil
-    titleBar.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = i.Position
-            startPos = win.Position
-        end
-    end)
-    UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = i.Position - dragStart
-            win.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-
-    -- ---- Sidebar tabs ----
-    local sidebar = makeInstance("Frame", {
-        BackgroundColor3 = Theme.Secondary,
-        Size = UDim2.new(0,120,1,0),
-        BorderSizePixel = 0,
-    }, contentArea)
-
+    
+    -- ── SIDEBAR ──
+    local Sidebar = Instance.new("Frame", Main)
+    Sidebar.Name             = "Sidebar"
+    Sidebar.Size             = UDim2.new(0, 180, 1, -50)
+    Sidebar.Position         = UDim2.new(0, 0, 0, 50)
+    Sidebar.BackgroundColor3 = CONFIG.COLORS.SIDEBAR
+    Sidebar.BorderSizePixel  = 0
+    
+    -- Séparateur sidebar
+    local Divider = Instance.new("Frame", Sidebar)
+    Divider.Size             = UDim2.new(0, 1, 1, 0)
+    Divider.Position         = UDim2.new(1, -1, 0, 0)
+    Divider.BackgroundColor3 = Color3.fromRGB(40,40,80)
+    Divider.BorderSizePixel  = 0
+    
+    -- ── CONTENT PANEL ──
+    local Content = Instance.new("Frame", Main)
+    Content.Name             = "Content"
+    Content.Size             = UDim2.new(1, -180, 1, -50)
+    Content.Position         = UDim2.new(0, 180, 0, 50)
+    Content.BackgroundColor3 = CONFIG.COLORS.BG_CARD
+    Content.BorderSizePixel  = 0
+    AddCorner(Content, 12)
+    -- Fix coin haut gauche
+    local ContentFix = Instance.new("Frame", Main)
+    ContentFix.Size             = UDim2.new(0, 15, 1, -50)
+    ContentFix.Position         = UDim2.new(0, 180, 0, 50)
+    ContentFix.BackgroundColor3 = CONFIG.COLORS.BG_CARD
+    ContentFix.BorderSizePixel  = 0
+    
+    -- Scrollable content
+    local ScrollFrame = Instance.new("ScrollingFrame", Content)
+    ScrollFrame.Size                = UDim2.new(1, 0, 1, 0)
+    ScrollFrame.BackgroundTransparency = 1
+    ScrollFrame.BorderSizePixel     = 0
+    ScrollFrame.ScrollBarThickness  = 4
+    ScrollFrame.ScrollBarImageColor3 = CONFIG.COLORS.ACCENT
+    ScrollFrame.CanvasSize          = UDim2.new(0, 0, 0, 0)  -- auto-ajusté
+    
+    -- ── TABS SIDEBAR ──
+    local tabs = {"ESP", "Aimbot", "Movement", "Teleport", "Players", "Keys"}
+    local tabIcons = {"👁", "🎯", "🏃", "📍", "👥", "🔑"}
     local tabButtons = {}
-    local tabList = makeInstance("UIListLayout", {
-        Padding = UDim.new(0,4),
-        FillDirection = Enum.FillDirection.Vertical,
-    }, sidebar)
-    makeInstance("UIPadding", {
-        PaddingTop=UDim.new(0,8), PaddingLeft=UDim.new(0,6), PaddingRight=UDim.new(0,6)
-    }, sidebar)
-
-    -- Content panel
-    local contentPanel = makeInstance("Frame", {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1,-130,1,-10),
-        Position = UDim2.new(0,125,0,5),
-    }, contentArea)
-
-    local tabNames = {"ESP", "Aimbot", "NoClip", "FreeCam", "Teleport", "Bypass", "Settings"}
-    local tabIcons = {"👁", "🎯", "👻", "📷", "⚡", "🛡", "⚙️"}
-
-    for i, name in ipairs(tabNames) do
-        local content = makeInstance("ScrollingFrame", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1,0,1,0),
-            BorderSizePixel = 0,
-            ScrollBarThickness = 3,
-            ScrollBarImageColor3 = Theme.Accent,
-            Visible = false,
-        }, contentPanel)
-        makeInstance("UIListLayout", {
-            Padding = UDim.new(0,6),
-            FillDirection = Enum.FillDirection.Vertical,
-            SortOrder = Enum.SortOrder.LayoutOrder,
-        }, content)
-        makeInstance("UIPadding", {PaddingRight=UDim.new(0,4)}, content)
-
-        tabContents[name] = content
-
-        local tbtn = makeInstance("TextButton", {
-            Text = tabIcons[i] .. " " .. name,
-            TextColor3 = Theme.TextDim,
-            Font = Enum.Font.GothamMedium,
-            TextSize = 12,
-            BackgroundColor3 = Theme.Primary,
-            Size = UDim2.new(1,0,0,32),
-            BorderSizePixel = 0,
-            AutoButtonColor = false,
-        }, sidebar)
-        makeInstance("UICorner", {CornerRadius = UDim.new(0,8)}, tbtn)
-
-        tabButtons[name] = tbtn
-        tbtn.MouseButton1Click:Connect(function()
-            for n, c in pairs(tabContents) do
-                c.Visible = false
-                tabButtons[n].BackgroundColor3 = Theme.Primary
-                tabButtons[n].TextColor3       = Theme.TextDim
+    local tabPanels  = {}
+    
+    local function SwitchTab(tabName)
+        UIState.CurrentTab = tabName
+        for t, btn in pairs(tabButtons) do
+            local isActive = (t == tabName)
+            MakeTween(btn, {
+                BackgroundColor3 = isActive and CONFIG.COLORS.ACCENT or Color3.new(0,0,0),
+                BackgroundTransparency = isActive and 0.7 or 1,
+            }, 0.15)
+            -- Icône indicator
+            local indicator = btn:FindFirstChild("Indicator")
+            if indicator then
+                MakeTween(indicator, {BackgroundTransparency = isActive and 0 or 1}, 0.15)
             end
-            content.Visible = true
-            tbtn.BackgroundColor3 = Theme.Accent
-            tbtn.TextColor3       = Theme.Text
-            activeTab = name
+        end
+        for t, panel in pairs(tabPanels) do
+            panel.Visible = (t == tabName)
+        end
+    end
+    
+    for i, tabName in ipairs(tabs) do
+        -- Bouton tab sidebar
+        local TabBtn = Instance.new("TextButton", Sidebar)
+        TabBtn.Size             = UDim2.new(1, -10, 0, 40)
+        TabBtn.Position         = UDim2.new(0, 5, 0, 10 + (i-1)*44)
+        TabBtn.BackgroundColor3 = CONFIG.COLORS.ACCENT
+        TabBtn.BackgroundTransparency = 1
+        TabBtn.BorderSizePixel  = 0
+        TabBtn.Text             = ""
+        AddCorner(TabBtn, 8)
+        
+        -- Indicator bar gauche
+        local Indicator = Instance.new("Frame", TabBtn)
+        Indicator.Name              = "Indicator"
+        Indicator.Size              = UDim2.new(0, 3, 0.6, 0)
+        Indicator.Position          = UDim2.new(0, 0, 0.2, 0)
+        Indicator.BackgroundColor3  = CONFIG.COLORS.ACCENT
+        Indicator.BackgroundTransparency = 1
+        Indicator.BorderSizePixel   = 0
+        AddCorner(Indicator, 2)
+        
+        local TabIcon = Instance.new("TextLabel", TabBtn)
+        TabIcon.Size              = UDim2.new(0, 30, 1, 0)
+        TabIcon.Position          = UDim2.new(0, 10, 0, 0)
+        TabIcon.BackgroundTransparency = 1
+        TabIcon.Text              = tabIcons[i]
+        TabIcon.TextSize          = 16
+        TabIcon.Font              = Enum.Font.Gotham
+        TabIcon.TextColor3        = CONFIG.COLORS.TEXT_PRIMARY
+        
+        local TabLabel = Instance.new("TextLabel", TabBtn)
+        TabLabel.Size             = UDim2.new(1, -45, 1, 0)
+        TabLabel.Position         = UDim2.new(0, 42, 0, 0)
+        TabLabel.BackgroundTransparency = 1
+        TabLabel.Text             = tabName
+        TabLabel.Font             = Enum.Font.Gotham
+        TabLabel.TextSize         = 13
+        TabLabel.TextColor3       = CONFIG.COLORS.TEXT_PRIMARY
+        TabLabel.TextXAlignment   = Enum.TextXAlignment.Left
+        
+        tabButtons[tabName] = TabBtn
+        
+        -- Panel contenu
+        local Panel = Instance.new("Frame", ScrollFrame)
+        Panel.Name              = tabName .. "Panel"
+        Panel.Size              = UDim2.new(1, 0, 1, 0)
+        Panel.BackgroundTransparency = 1
+        Panel.Visible           = false
+        tabPanels[tabName]      = Panel
+        
+        TabBtn.MouseButton1Click:Connect(function()
+            SwitchTab(tabName)
         end)
     end
-
-    -- Active default
-    tabContents["ESP"].Visible = true
-    tabButtons["ESP"].BackgroundColor3 = Theme.Accent
-    tabButtons["ESP"].TextColor3       = Theme.Text
-
-    -- ═══ Remplissage des onglets ═══
-
-    -- ESP TAB
-    do
-        local c = tabContents["ESP"]
-        makeToggle(c, "ESP Activé",        Settings.ESP.Enabled,      function(v) Settings.ESP.Enabled=v end)
-        makeToggle(c, "Boîtes",            Settings.ESP.ShowBox,       function(v) Settings.ESP.ShowBox=v end)
-        makeToggle(c, "Noms",              Settings.ESP.ShowName,      function(v) Settings.ESP.ShowName=v end)
-        makeToggle(c, "Santé",             Settings.ESP.ShowHealth,    function(v) Settings.ESP.ShowHealth=v end)
-        makeToggle(c, "Distance",          Settings.ESP.ShowDistance,  function(v) Settings.ESP.ShowDistance=v end)
-        makeToggle(c, "Traceurs",          Settings.ESP.ShowTracers,   function(v) Settings.ESP.ShowTracers=v end)
-        makeToggle(c, "Team Check",        Settings.ESP.TeamCheck,     function(v) Settings.ESP.TeamCheck=v end)
-        makeSlider(c, "Distance max",      100, 3000, Settings.ESP.MaxDistance,
-            function(v) Settings.ESP.MaxDistance=v end)
-    end
-
-    -- AIMBOT TAB
-    do
-        local c = tabContents["Aimbot"]
-        makeToggle(c, "Aimbot Activé",     Settings.Aimbot.Enabled,     function(v) Settings.Aimbot.Enabled=v end)
-        makeToggle(c, "Silent Aim",        Settings.Aimbot.SilentAim,   function(v) Settings.Aimbot.SilentAim=v end)
-        makeToggle(c, "Afficher FOV",      Settings.Aimbot.ShowFOV,     function(v) Settings.Aimbot.ShowFOV=v end)
-        makeToggle(c, "Prédiction balle",  Settings.Aimbot.PredictBullet,function(v) Settings.Aimbot.PredictBullet=v end)
-        makeToggle(c, "Team Check",        Settings.Aimbot.TeamCheck,   function(v) Settings.Aimbot.TeamCheck=v end)
-        makeSlider(c, "FOV",               10, 500, Settings.Aimbot.FOV,
-            function(v) Settings.Aimbot.FOV=v end)
-        makeSlider(c, "Smoothing (x100)",  0, 100, math.floor(Settings.Aimbot.Smoothing*100),
-            function(v) Settings.Aimbot.Smoothing=v/100 end)
-
-        -- HitPart selector
-        local parts = {"Head","Torso","HumanoidRootPart"}
-        for _, p in ipairs(parts) do
-            makeButton(c, "HitPart: " .. p, function()
-                Settings.Aimbot.HitPart = p
-            end)
-        end
-    end
-
-    -- NOCLIP TAB
-    do
-        local c = tabContents["NoClip"]
-        makeToggle(c, "NoClip Activé", Settings.NoClip.Enabled, function(v) Settings.NoClip.Enabled=v end)
-        makeInstance("TextLabel", {
-            Text = "Désactive les collisions du personnage.\nTouche keybind : F (voir Settings)",
-            TextColor3 = Theme.TextDim,
-            Font = Enum.Font.Gotham,
-            TextSize = 11,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1,0,0,40),
-            TextWrapped = true,
-            TextXAlignment = Enum.TextXAlignment.Left,
-        }, c)
-    end
-
-    -- FREECAM TAB
-    do
-        local c = tabContents["FreeCam"]
-        makeToggle(c, "FreeCam Activé", Settings.FreeCam.Enabled, function(v)
-            Settings.FreeCam.Enabled = v
-            FreeCamEngine:Toggle()
-        end)
-        makeSlider(c, "Vitesse (x10)", 1, 100, math.floor(Settings.FreeCam.Speed*10),
-            function(v) Settings.FreeCam.Speed=v/10 end)
-        makeSlider(c, "Boost Shift (x10)", 10, 100, math.floor(Settings.FreeCam.ShiftMult*10),
-            function(v) Settings.FreeCam.ShiftMult=v/10 end)
-        makeInstance("TextLabel", {
-            Text = "Contrôles: WASD + Q/E\nShift = boost vitesse\nSouris = rotation",
-            TextColor3 = Theme.TextDim,
-            Font = Enum.Font.Gotham,
-            TextSize = 11,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1,0,0,50),
-            TextWrapped = true,
-            TextXAlignment = Enum.TextXAlignment.Left,
-        }, c)
-    end
-
-    -- TELEPORT TAB
-    do
-        local c = tabContents["Teleport"]
-
-        makeInstance("TextLabel", {
-            Text = "── VILLES ──",
-            TextColor3 = Theme.Accent,
-            Font = Enum.Font.GothamBold,
-            TextSize = 12,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1,0,0,20),
-            TextXAlignment = Enum.TextXAlignment.Left,
-        }, c)
-
-        for cityName, _ in pairs(Settings.Cities) do
-            makeButton(c, "→ " .. cityName, function()
-                TeleportEngine:ToCity(cityName)
-            end)
-        end
-
-        makeInstance("TextLabel", {
-            Text = "── JOUEURS ──",
-            TextColor3 = Theme.Accent,
-            Font = Enum.Font.GothamBold,
-            TextSize = 12,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1,0,0,20),
-            TextXAlignment = Enum.TextXAlignment.Left,
-        }, c)
-
-        local refreshBtn = makeButton(c, "↺ Rafraîchir liste joueurs", function() end)
-
-        local function refreshPlayerList()
-            -- Supprimer vieux boutons joueurs
-            for _, ch in ipairs(c:GetChildren()) do
-                if ch:IsA("TextButton") and ch.Name:find("_player_") then
-                    ch:Destroy()
-                end
-            end
-            for _, pl in ipairs(Players:GetPlayers()) do
-                if pl ~= LP then
-                    local pb = makeButton(c, "→ " .. pl.Name, function()
-                        TeleportEngine:ToPlayer(pl)
-                    end)
-                    pb.Name = "_player_" .. pl.Name
-                end
-            end
-        end
-
-        refreshBtn.MouseButton1Click:Connect(refreshPlayerList)
-        refreshPlayerList()
-    end
-
-    -- BYPASS TAB
-    do
-        local c = tabContents["Bypass"]
-        makeToggle(c, "Anti-Kick",          Settings.Bypass.AntiKick,       function(v) Settings.Bypass.AntiKick=v end)
-        makeToggle(c, "Anti-SpeedDetect",   Settings.Bypass.AntiSpeed,      function(v) Settings.Bypass.AntiSpeed=v end)
-        makeToggle(c, "Anti-TpDetect",      Settings.Bypass.AntiTeleport,   function(v) Settings.Bypass.AntiTeleport=v end)
-        makeToggle(c, "Fake Walkspeed",     Settings.Bypass.FakeWalkspeed,  function(v) Settings.Bypass.FakeWalkspeed=v end)
-        makeToggle(c, "Remote Logger",      Settings.Bypass.RemoteLogger,   function(v) Settings.Bypass.RemoteLogger=v end)
-
-        makeInstance("TextLabel", {
-            Text = "Le bypass intercepte les RemoteEvents\nde détection et les neutralise silencieusement.",
-            TextColor3 = Theme.TextDim,
-            Font = Enum.Font.Gotham,
-            TextSize = 11,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1,0,0,40),
-            TextWrapped = true,
-            TextXAlignment = Enum.TextXAlignment.Left,
-        }, c)
-    end
-
-    -- SETTINGS TAB
-    do
-        local c = tabContents["Settings"]
-        makeInstance("TextLabel", {
-            Text = "Keybinds (clavier)",
-            TextColor3 = Theme.Accent,
-            Font = Enum.Font.GothamBold,
-            TextSize = 13,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1,0,0,20),
-            TextXAlignment = Enum.TextXAlignment.Left,
-        }, c)
-
-        local keybinds = {
-            {"Insert / RightShift", "Afficher / Cacher UI"},
-            {"RMB (Clic droit)",    "Activer Aimbot (mode normal)"},
-            {"F",                   "Toggle NoClip"},
-            {"G",                   "Toggle FreeCam"},
-        }
-        for _, kb in ipairs(keybinds) do
-            local row = makeInstance("Frame", {
-                BackgroundColor3 = Theme.Secondary,
-                Size = UDim2.new(1,0,0,28),
-                BorderSizePixel = 0,
-            }, c)
-            makeInstance("UICorner", {CornerRadius = UDim.new(0,6)}, row)
-            makeInstance("TextLabel", {
-                Text = "[" .. kb[1] .. "]  →  " .. kb[2],
-                TextColor3 = Theme.Text,
-                Font = Enum.Font.Gotham,
-                TextSize = 12,
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1,-10,1,0),
-                Position = UDim2.new(0,8,0,0),
-                TextXAlignment = Enum.TextXAlignment.Left,
-            }, row)
-        end
-
-        makeInstance("TextLabel", {
-            Text = "\nVersion: 2.0 | Executor: Auto-detect\nCompatible: PC + Mobile",
-            TextColor3 = Theme.TextDim,
-            Font = Enum.Font.Gotham,
-            TextSize = 11,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1,0,0,50),
-            TextWrapped = true,
-            TextXAlignment = Enum.TextXAlignment.Left,
-        }, c)
-    end
-
-    -- Mise à jour des ScrollingFrames
-    for _, content in pairs(tabContents) do
-        local layout = content:FindFirstChildOfClass("UIListLayout")
-        if layout then
-            layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                content.CanvasSize = UDim2.new(0,0,0, layout.AbsoluteContentSize.Y + 10)
-            end)
-        end
-    end
-
-    -- Keybind hide/show
-    UserInputService.InputBegan:Connect(function(i, gp)
-        if gp then return end
-        if i.KeyCode == Enum.KeyCode.Insert or i.KeyCode == Enum.KeyCode.RightShift then
-            win.Visible = not win.Visible
-        end
-        if i.KeyCode == Enum.KeyCode.F then
-            Settings.NoClip.Enabled = not Settings.NoClip.Enabled
-        end
-        if i.KeyCode == Enum.KeyCode.G then
-            Settings.FreeCam.Enabled = not Settings.FreeCam.Enabled
-            FreeCamEngine:Toggle()
-        end
+    
+    -- ════════════════════════
+    --  PANEL: ESP
+    -- ════════════════════════
+    local ESPPanel = tabPanels["ESP"]
+    local yOff = 10
+    
+    local titleESP = Instance.new("TextLabel", ESPPanel)
+    titleESP.Size            = UDim2.new(1, -20, 0, 30)
+    titleESP.Position        = UDim2.new(0, 10, 0, yOff)
+    titleESP.BackgroundTransparency = 1
+    titleESP.Text            = "🍌 ESP Configuration"
+    titleESP.TextColor3      = CONFIG.COLORS.ACCENT
+    titleESP.Font            = Enum.Font.GothamBold
+    titleESP.TextSize        = 14
+    titleESP.TextXAlignment  = Enum.TextXAlignment.Left
+    yOff = yOff + 35
+    
+    CreateToggle(ESPPanel, yOff, "Player ESP (Boîtes 3D)", false, function(v)
+        if v then ESP:Enable() else ESP:Disable() end
     end)
-end
-
--- ══════════════════════════════════════════════
---              MAIN LOOP
--- ══════════════════════════════════════════════
-
-local function startMainLoop()
-    BypassEngine:Init()
-    AimbotEngine:Init()
-
-    RunService.RenderStepped:Connect(function(dt)
-        -- ESP
-        if Settings.ESP.Enabled then
-            updateESP()
+    yOff = yOff + 44
+    
+    CreateToggle(ESPPanel, yOff, "Noms des joueurs", true, function(v)
+        ESP.ShowName = v
+    end)
+    yOff = yOff + 44
+    
+    CreateToggle(ESPPanel, yOff, "Barre de vie", true, function(v)
+        ESP.ShowHealth = v
+    end)
+    yOff = yOff + 44
+    
+    CreateToggle(ESPPanel, yOff, "Distance", true, function(v)
+        ESP.ShowDist = v
+    end)
+    yOff = yOff + 44
+    
+    CreateSlider(ESPPanel, yOff, "Distance max ESP", 50, 2000, 1000, function(v)
+        ESP.MaxDist = v
+    end)
+    yOff = yOff + 60
+    
+    -- Premium: ESP items/loot
+    CreateButton(ESPPanel, yOff, "Loot ESP (Items)", true, function()
+        -- Logique loot ESP premium
+    end)
+    yOff = yOff + 44
+    
+    CreateButton(ESPPanel, yOff, "Zombie ESP", true, function()end)
+    yOff = yOff + 44
+    
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, yOff + 20)
+    
+    -- ════════════════════════
+    --  PANEL: AIMBOT
+    -- ════════════════════════
+    local AimbotPanel = tabPanels["Aimbot"]
+    yOff = 10
+    
+    local titleAim = Instance.new("TextLabel", AimbotPanel)
+    titleAim.Size            = UDim2.new(1, -20, 0, 30)
+    titleAim.Position        = UDim2.new(0, 10, 0, yOff)
+    titleAim.BackgroundTransparency = 1
+    titleAim.Text            = "🎯 Aimbot Settings"
+    titleAim.TextColor3      = CONFIG.COLORS.ACCENT
+    titleAim.Font            = Enum.Font.GothamBold
+    titleAim.TextSize        = 14
+    titleAim.TextXAlignment  = Enum.TextXAlignment.Left
+    yOff = yOff + 35
+    
+    CreateToggle(AimbotPanel, yOff, "Aimbot (Smooth)", false, function(v)
+        if v then Aimbot:Enable() else Aimbot:Disable() end
+    end)
+    yOff = yOff + 44
+    
+    CreateToggle(AimbotPanel, yOff, "Silent Aim", false, function(v)
+        if v then Aimbot:EnableSilent() end
+    end)
+    yOff = yOff + 44
+    
+    CreateToggle(AimbotPanel, yOff, "FOV Circle", true, function(v)
+        if Aimbot.FOVCircle then Aimbot.FOVCircle.Visible = v end
+    end)
+    yOff = yOff + 44
+    
+    CreateSlider(AimbotPanel, yOff, "FOV Radius", 50, 500, 150, function(v)
+        Aimbot.FOV = v
+        if Aimbot.FOVCircle then Aimbot.FOVCircle.Radius = v end
+    end)
+    yOff = yOff + 60
+    
+    CreateSlider(AimbotPanel, yOff, "Smoothness", 1, 20, 5, function(v)
+        Aimbot.Smoothness = v / 100
+    end)
+    yOff = yOff + 60
+    
+    -- Target part selector
+    local partLabel = Instance.new("TextLabel", AimbotPanel)
+    partLabel.Size            = UDim2.new(1,-20,0,20)
+    partLabel.Position        = UDim2.new(0,10,0,yOff)
+    partLabel.BackgroundTransparency = 1
+    partLabel.Text            = "Cible:"
+    partLabel.TextColor3      = CONFIG.COLORS.TEXT_DIM
+    partLabel.Font            = Enum.Font.Gotham
+    partLabel.TextSize        = 11
+    partLabel.TextXAlignment  = Enum.TextXAlignment.Left
+    yOff = yOff + 25
+    
+    local parts = {"Head", "HumanoidRootPart", "UpperTorso"}
+    for _, partName in ipairs(parts) do
+        local pBtn = Instance.new("TextButton", AimbotPanel)
+        pBtn.Size             = UDim2.new(0, 100, 0, 28)
+        pBtn.Position         = UDim2.new(0, 10 + (_{Head=0,HumanoidRootPart=105,UpperTorso=210})[partName], 0, yOff)
+        pBtn.BackgroundColor3 = Aimbot.TargetPart == partName and CONFIG.COLORS.ACCENT or CONFIG.COLORS.BG_SECONDARY
+        pBtn.Text             = partName == "HumanoidRootPart" and "Torso" or partName
+        pBtn.TextColor3       = Color3.fromRGB(255,255,255)
+        pBtn.Font             = Enum.Font.Gotham
+        pBtn.TextSize         = 11
+        AddCorner(pBtn, 6)
+        pBtn.MouseButton1Click:Connect(function()
+            Aimbot.TargetPart = partName
+            for _, b in ipairs(AimbotPanel:GetChildren()) do
+                if b:IsA("TextButton") then
+                    MakeTween(b, {BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY}, 0.1)
+                end
+            end
+            MakeTween(pBtn, {BackgroundColor3 = CONFIG.COLORS.ACCENT}, 0.1)
+        end)
+    end
+    yOff = yOff + 38
+    
+    -- Premium aimbot features
+    CreateButton(AimbotPanel, yOff, "Prediction (Velocity Lead)", true, function()end)
+    yOff = yOff + 44
+    CreateButton(AimbotPanel, yOff, "Auto-fire (à la cible)", true, function()end)
+    
+    -- ════════════════════════
+    --  PANEL: MOVEMENT
+    -- ════════════════════════
+    local MovePanel = tabPanels["Movement"]
+    yOff = 10
+    
+    local titleMove = Instance.new("TextLabel", MovePanel)
+    titleMove.Size           = UDim2.new(1,-20,0,30)
+    titleMove.Position       = UDim2.new(0,10,0,yOff)
+    titleMove.BackgroundTransparency = 1
+    titleMove.Text           = "🏃 Movement"
+    titleMove.TextColor3     = CONFIG.COLORS.ACCENT
+    titleMove.Font           = Enum.Font.GothamBold
+    titleMove.TextSize       = 14
+    titleMove.TextXAlignment = Enum.TextXAlignment.Left
+    yOff = yOff + 35
+    
+    CreateToggle(MovePanel, yOff, "Noclip (WASD traverse murs)", false, function(v)
+        if v then Movement:EnableNoclip() else Movement:DisableNoclip() end
+    end)
+    yOff = yOff + 44
+    
+    CreateToggle(MovePanel, yOff, "Freecam (WASD+QE+souris)", false, function(v)
+        if v then Movement:EnableFreecam() else Movement:DisableFreecam() end
+    end)
+    yOff = yOff + 44
+    
+    CreateSlider(MovePanel, yOff, "Walk Speed", 16, 500, 16, function(v)
+        Movement:SetSpeed(v)
+    end)
+    yOff = yOff + 60
+    
+    CreateSlider(MovePanel, yOff, "Jump Power", 50, 500, 50, function(v)
+        Movement:SetJump(v)
+    end)
+    yOff = yOff + 60
+    
+    CreateSlider(MovePanel, yOff, "Freecam Speed", 1, 50, 10, function(v)
+        Movement.FreecamSpeed = v / 10
+    end)
+    yOff = yOff + 60
+    
+    CreateButton(MovePanel, yOff, "Fly Mode", true, function()end)
+    yOff = yOff + 44
+    CreateButton(MovePanel, yOff, "Infinite Jump", false, function()
+        UserInputService.JumpRequest:Connect(function()
+            local hum = LocalPlayer.Character 
+                       and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end)
+    end)
+    
+    -- ════════════════════════
+    --  PANEL: TELEPORT
+    -- ════════════════════════
+    local TpPanel = tabPanels["Teleport"]
+    yOff = 10
+    
+    local titleTp = Instance.new("TextLabel", TpPanel)
+    titleTp.Size            = UDim2.new(1,-20,0,30)
+    titleTp.Position        = UDim2.new(0,10,0,yOff)
+    titleTp.BackgroundTransparency = 1
+    titleTp.Text            = "📍 Teleport — Villes"
+    titleTp.TextColor3      = CONFIG.COLORS.ACCENT
+    titleTp.Font            = Enum.Font.GothamBold
+    titleTp.TextSize        = 14
+    titleTp.TextXAlignment  = Enum.TextXAlignment.Left
+    yOff = yOff + 35
+    
+    for _, city in ipairs(CONFIG.CITIES) do
+        CreateButton(TpPanel, yOff, city.Name, false, function()
+            Movement:TeleportCity(city.Name)
+        end)
+        yOff = yOff + 44
+    end
+    
+    -- ════════════════════════
+    --  PANEL: PLAYERS
+    -- ════════════════════════
+    local PlayersPanel = tabPanels["Players"]
+    yOff = 10
+    
+    local titlePlayers = Instance.new("TextLabel", PlayersPanel)
+    titlePlayers.Size           = UDim2.new(1,-20,0,30)
+    titlePlayers.Position       = UDim2.new(0,10,0,yOff)
+    titlePlayers.BackgroundTransparency = 1
+    titlePlayers.Text           = "👥 Players"
+    titlePlayers.TextColor3     = CONFIG.COLORS.ACCENT
+    titlePlayers.Font           = Enum.Font.GothamBold
+    titlePlayers.TextSize       = 14
+    titlePlayers.TextXAlignment = Enum.TextXAlignment.Left
+    yOff = yOff + 35
+    
+    local function RebuildPlayerList()
+        -- Vide le panel
+        for _, c in ipairs(PlayersPanel:GetChildren()) do
+            if c.Name:find("PlayerEntry") then c:Destroy() end
+        end
+        
+        local pYOff = yOff
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local entry = Instance.new("Frame", PlayersPanel)
+                entry.Name             = "PlayerEntry_" .. player.Name
+                entry.Size             = UDim2.new(1,-20,0,44)
+                entry.Position         = UDim2.new(0,10,0,pYOff)
+                entry.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+                entry.BorderSizePixel  = 0
+                AddCorner(entry, 6)
+                
+                -- Avatar thumb
+                local ava = Instance.new("ImageLabel", entry)
+                ava.Size             = UDim2.new(0,32,0,32)
+                ava.Position         = UDim2.new(0,6,0.5,-16)
+                ava.BackgroundColor3 = Color3.fromRGB(30,30,50)
+                ava.Image            = string.format("https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=48&height=48&format=png", player.UserId)
+                AddCorner(ava, 16)
+                
+                local pName = Instance.new("TextLabel", entry)
+                pName.Size            = UDim2.new(0,150,0,20)
+                pName.Position        = UDim2.new(0,46,0,4)
+                pName.BackgroundTransparency = 1
+                pName.Text            = player.Name
+                pName.TextColor3      = CONFIG.COLORS.TEXT_PRIMARY
+                pName.Font            = Enum.Font.GothamBold
+                pName.TextSize        = 12
+                pName.TextXAlignment  = Enum.TextXAlignment.Left
+                
+                -- Distance
+                local hum = player.Character 
+                           and player.Character:FindFirstChildOfClass("Humanoid")
+                local hrp = player.Character 
+                           and player.Character:FindFirstChild("HumanoidRootPart")
+                local myHRP = LocalPlayer.Character 
+                             and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local dist  = hrp and myHRP 
+                             and math.floor((hrp.Position - myHRP.Position).Magnitude) or 0
+                
+                local pDist = Instance.new("TextLabel", entry)
+                pDist.Size            = UDim2.new(0,150,0,16)
+                pDist.Position        = UDim2.new(0,46,0,24)
+                pDist.BackgroundTransparency = 1
+                pDist.Text            = string.format("%.0fm", dist)
+                pDist.TextColor3      = CONFIG.COLORS.TEXT_DIM
+                pDist.Font            = Enum.Font.Gotham
+                pDist.TextSize        = 10
+                pDist.TextXAlignment  = Enum.TextXAlignment.Left
+                
+                -- Bouton TP vers joueur
+                local tpBtn = Instance.new("TextButton", entry)
+                tpBtn.Size            = UDim2.new(0,60,0,26)
+                tpBtn.Position        = UDim2.new(1,-70,0.5,-13)
+                tpBtn.BackgroundColor3 = CONFIG.COLORS.ACCENT
+                tpBtn.Text            = "📍 TP"
+                tpBtn.TextColor3      = Color3.fromRGB(0,0,0)
+                tpBtn.Font            = Enum.Font.GothamBold
+                tpBtn.TextSize        = 11
+                AddCorner(tpBtn, 6)
+                tpBtn.MouseButton1Click:Connect(function()
+                    Movement:TeleportToPlayer(player)
+                end)
+                
+                pYOff = pYOff + 52
+            end
+        end
+    end
+    
+    RebuildPlayerList()
+    
+    -- Refresh button
+    local refreshBtn = Instance.new("TextButton", PlayersPanel)
+    refreshBtn.Size             = UDim2.new(1,-20,0,32)
+    refreshBtn.Position         = UDim2.new(0,10,0,yOff - 40)
+    refreshBtn.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+    refreshBtn.Text             = "🔄 Rafraîchir la liste"
+    refreshBtn.TextColor3       = CONFIG.COLORS.TEXT_DIM
+    refreshBtn.Font             = Enum.Font.Gotham
+    refreshBtn.TextSize         = 12
+    AddCorner(refreshBtn, 6)
+    refreshBtn.MouseButton1Click:Connect(RebuildPlayerList)
+    
+    -- ════════════════════════
+    --  PANEL: KEY SYSTEM UI
+    -- ════════════════════════
+    local KeyPanel = tabPanels["Keys"]
+    yOff = 10
+    
+    local titleKey = Instance.new("TextLabel", KeyPanel)
+    titleKey.Size           = UDim2.new(1,-20,0,30)
+    titleKey.Position       = UDim2.new(0,10,0,yOff)
+    titleKey.BackgroundTransparency = 1
+    titleKey.Text           = "🔑 Key System"
+    titleKey.TextColor3     = CONFIG.COLORS.ACCENT
+    titleKey.Font           = Enum.Font.GothamBold
+    titleKey.TextSize       = 14
+    titleKey.TextXAlignment = Enum.TextXAlignment.Left
+    yOff = yOff + 40
+    
+    local statusMsg = Instance.new("TextLabel", KeyPanel)
+    statusMsg.Size          = UDim2.new(1,-20,0,40)
+    statusMsg.Position      = UDim2.new(0,10,0,yOff)
+    statusMsg.BackgroundColor3 = Color3.fromRGB(20,30,20)
+    statusMsg.Text          = isPremium and "✅ Clé PREMIUM active" or "✅ Clé validée"
+    statusMsg.TextColor3    = CONFIG.COLORS.ONLINE
+    statusMsg.Font          = Enum.Font.GothamBold
+    statusMsg.TextSize      = 13
+    AddCorner(statusMsg, 6)
+    yOff = yOff + 50
+    
+    local genInfo = Instance.new("TextLabel", KeyPanel)
+    genInfo.Size            = UDim2.new(1,-20,0,50)
+    genInfo.Position        = UDim2.new(0,10,0,yOff)
+    genInfo.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+    genInfo.Text            = "Génère une clé gratuite (1 fois / 24h)\nLa clé sera envoyée sur le webhook Discord"
+    genInfo.TextColor3      = CONFIG.COLORS.TEXT_DIM
+    genInfo.Font            = Enum.Font.Gotham
+    genInfo.TextSize        = 11
+    genInfo.TextWrapped     = true
+    AddCorner(genInfo, 6)
+    yOff = yOff + 60
+    
+    local genBtn = Instance.new("TextButton", KeyPanel)
+    genBtn.Size             = UDim2.new(1,-20,0,40)
+    genBtn.Position         = UDim2.new(0,10,0,yOff)
+    genBtn.BackgroundColor3 = CONFIG.COLORS.ACCENT
+    genBtn.Text             = "🍌 Générer une clé"
+    genBtn.TextColor3       = Color3.fromRGB(0,0,0)
+    genBtn.Font             = Enum.Font.GothamBold
+    genBtn.TextSize         = 14
+    AddCorner(genBtn, 8)
+    yOff = yOff + 50
+    
+    local genResult = Instance.new("TextLabel", KeyPanel)
+    genResult.Size          = UDim2.new(1,-20,0,36)
+    genResult.Position      = UDim2.new(0,10,0,yOff)
+    genResult.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+    genResult.Text          = "— Aucune clé générée cette session —"
+    genResult.TextColor3    = CONFIG.COLORS.TEXT_DIM
+    genResult.Font          = Enum.Font.Gotham
+    genResult.TextSize      = 11
+    AddCorner(genResult, 6)
+    
+    genBtn.MouseButton1Click:Connect(function()
+        genBtn.Text = "⏳ Génération..."
+        local key, err = KeySystem:GenerateKey()
+        if err then
+            genResult.Text       = "⚠️ " .. err
+            genResult.TextColor3 = CONFIG.COLORS.DANGER
         else
-            for _, esp in pairs(ESPObjects) do
-                for _, d in pairs(esp) do d.Visible = false end
+            genResult.Text       = key
+            genResult.TextColor3 = CONFIG.COLORS.ONLINE
+            if setclipboard then
+                setclipboard(key)
+                genBtn.Text = "✅ Clé copiée!"
+            else
+                genBtn.Text = "✅ Clé générée!"
             end
         end
-
-        -- Aimbot
-        AimbotEngine:Update()
-
-        -- NoClip
-        NoClipEngine:Update()
-
-        -- FreeCam
-        FreeCamEngine:Update(dt)
+        task.wait(2)
+        genBtn.Text = "🍌 Générer une clé"
     end)
-
-    -- Nettoyage quand un joueur quitte
-    Players.PlayerRemoving:Connect(function(p)
-        clearESP(p)
+    
+    -- ── Drag support (PC) ──
+    local dragStart, startPos
+    
+    TopBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragStart = input.Position
+            startPos  = Main.Position
+            
+            local conn1, conn2
+            conn1 = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    conn1:Disconnect()
+                    conn2:Disconnect()
+                end
+            end)
+            conn2 = UserInputService.InputChanged:Connect(function(i)
+                if i.UserInputType == Enum.UserInputType.MouseMovement 
+                   or i.UserInputType == Enum.UserInputType.Touch then
+                    local delta = i.Position - dragStart
+                    Main.Position = UDim2.new(
+                        startPos.X.Scale, startPos.X.Offset + delta.X,
+                        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                    )
+                end
+            end)
+        end
     end)
-end
-
--- ══════════════════════════════════════════════
---              BOOT SEQUENCE
--- ══════════════════════════════════════════════
-
-local function boot()
-    -- Check session sauvegardée
-    local savedKey = loadSession()
-    if savedKey and validateKeyLocal(savedKey) then
-        keyValidated = true
-        buildMainGui()
-        startMainLoop()
-        return
+    
+    -- Switch vers premier onglet
+    SwitchTab("ESP")
+    
+    -- Animation d'ouverture
+    Main.Size = UDim2.new(0,780,0,0)
+    MakeTween(Main, {Size = UDim2.new(0,780,0,520)}, 0.35)
+    
+    -- Toggle affichage avec Insert (PC) ou bouton flottant (mobile)
+    if ExecutorEnv.IsMobile then
+        -- Bouton flottant pour toggle sur mobile
+        local FloatBtn = Instance.new("TextButton", ScreenGui)
+        FloatBtn.Size             = UDim2.new(0,50,0,50)
+        FloatBtn.Position         = UDim2.new(0,20,0.5,-25)
+        FloatBtn.BackgroundColor3 = CONFIG.COLORS.ACCENT
+        FloatBtn.Text             = "🍌"
+        FloatBtn.TextSize         = 24
+        FloatBtn.Font             = Enum.Font.GothamBold
+        FloatBtn.TextColor3       = Color3.fromRGB(0,0,0)
+        AddCorner(FloatBtn, 25)
+        
+        FloatBtn.MouseButton1Click:Connect(function()
+            Main.Visible = not Main.Visible
+        end)
+    else
+        UserInputService.InputBegan:Connect(function(input, gpe)
+            if not gpe and input.KeyCode == Enum.KeyCode.Insert then
+                Main.Visible = not Main.Visible
+            end
+        end)
     end
-
-    -- Sinon: afficher le Key GUI
-    buildKeyGui(function()
-        buildMainGui()
-        startMainLoop()
-    end)
+    
+    return ScreenGui
 end
 
--- Notification de chargement (compatible tous executors)
-pcall(function()
-    StarterGui:SetCore("SendNotification", {
-        Title = "☣ Infected Lands",
-        Text  = "Script chargé — Entrez votre clé",
-        Duration = 4,
-    })
-end)
+-- ══════════════════════════════════════════
+--  KEY SCREEN (avant l'UI principale)
+-- ══════════════════════════════════════════
 
-boot()
+function UI:ShowKeyScreen()
+    local old = CoreGui:FindFirstChild("BananaKeyScreen")
+    if old then old:Destroy() end
+    
+    local KeySG = Instance.new("ScreenGui")
+    KeySG.Name               = "BananaKeyScreen"
+    KeySG.ZIndexBehavior     = Enum.ZIndexBehavior.Sibling
+    KeySG.ResetOnSpawn       = false
+    KeySG.IgnoreGuiInset     = true
+    KeySG.Parent             = CoreGui
+    
+    local Overlay = Instance.new("Frame", KeySG)
+    Overlay.Size             = UDim2.new(1,0,1,0)
+    Overlay.BackgroundColor3 = Color3.fromRGB(5,5,15)
+    Overlay.BackgroundTransparency = 0.2
+    Overlay.BorderSizePixel  = 0
+    
+    local Card = Instance.new("Frame", KeySG)
+    Card.Size                = UDim2.new(0,420,0,320)
+    Card.Position            = UDim2.new(0.5,-210,0.5,-160)
+    Card.BackgroundColor3    = CONFIG.COLORS.BG_MAIN
+    Card.BorderSizePixel     = 0
+    AddCorner(Card, 14)
+    AddStroke(Card, CONFIG.COLORS.ACCENT, 1.5)
+    
+    local logo = Instance.new("TextLabel", Card)
+    logo.Size              = UDim2.new(1,0,0,60)
+    logo.Position          = UDim2.new(0,0,0,10)
+    logo.BackgroundTransparency = 1
+    logo.Text              = "🍌 Banana Hub"
+    logo.TextColor3        = CONFIG.COLORS.ACCENT
+    logo.Font              = Enum.Font.GothamBold
+    logo.TextSize          = 28
+    
+    local sub = Instance.new("TextLabel", Card)
+    sub.Size               = UDim2.new(1,0,0,20)
+    sub.Position           = UDim2.new(0,0,0,65)
+    sub.BackgroundTransparency = 1
+    sub.Text               = "INFECTED LANDS • Enter your key"
+    sub.TextColor3         = CONFIG.COLORS.TEXT_DIM
+    sub.Font               = Enum.Font.Gotham
+    sub.TextSize           = 11
+    
+    local InputBg = Instance.new("Frame", Card)
+    InputBg.Size           = UDim2.new(1,-40,0,44)
+    InputBg.Position       = UDim2.new(0,20,0,110)
+    InputBg.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+    InputBg.BorderSizePixel = 0
+    AddCorner(InputBg, 8)
+    AddStroke(InputBg, Color3.fromRGB(60,60,100), 1)
+    
+    local KeyInput = Instance.new("TextBox", InputBg)
+    KeyInput.Size          = UDim2.new(1,-20,1,0)
+    KeyInput.Position      = UDim2.new(0,10,0,0)
+    KeyInput.BackgroundTransparency = 1
+    KeyInput.Text          = ""
+    KeyInput.PlaceholderText = "BANANA-XXXX-XXXX-XXXX"
+    KeyInput.PlaceholderColor3 = CONFIG.COLORS.TEXT_DIM
+    KeyInput.TextColor3    = CONFIG.COLORS.TEXT_PRIMARY
+    KeyInput.Font          = Enum.Font.GothamBold
+    KeyInput.TextSize      = 14
+    KeyInput.ClearTextOnFocus = false
+    
+    local ErrorMsg = Instance.new("TextLabel", Card)
+    ErrorMsg.Size          = UDim2.new(1,-40,0,24)
+    ErrorMsg.Position      = UDim2.new(0,20,0,162)
+    ErrorMsg.BackgroundTransparency = 1
+    ErrorMsg.Text          = ""
+    ErrorMsg.TextColor3    = CONFIG.COLORS.DANGER
+    ErrorMsg.Font          = Enum.Font.Gotham
+    ErrorMsg.TextSize      = 11
+    
+    local ValidateBtn = Instance.new("TextButton", Card)
+    ValidateBtn.Size       = UDim2.new(1,-40,0,44)
+    ValidateBtn.Position   = UDim2.new(0,20,0,196)
+    ValidateBtn.BackgroundColor3 = CONFIG.COLORS.ACCENT
+    ValidateBtn.Text       = "🔑 Valider la clé"
+    ValidateBtn.TextColor3 = Color3.fromRGB(0,0,0)
+    ValidateBtn.Font       = Enum.Font.GothamBold
+    ValidateBtn.TextSize   = 15
+    AddCorner(ValidateBtn, 8)
+    
+    local GetKeyBtn = Instance.new("TextButton", Card)
+    GetKeyBtn.Size         = UDim2.new(1,-40,0,30)
+    GetKeyBtn.Position     = UDim2.new(0,20,0,250)
+    GetKeyBtn.BackgroundColor3 = Color3.fromRGB(20,20,40)
+    GetKeyBtn.Text         = "Obtenir une clé gratuitement →"
+    GetKeyBtn.TextColor3   = CONFIG.COLORS.TEXT_DIM
+    GetKeyBtn.Font         = Enum.Font.Gotham
+    GetKeyBtn.TextSize     = 11
+    AddCorner(GetKeyBtn, 6)
+    
+    GetKeyBtn.MouseButton1Click:Connect(function()
+        -- Génère une clé et l'affiche
+        local key, err = KeySystem:GenerateKey()
+        if key then
+            KeyInput.Text = key
+            if setclipboard then setclipboard(key) end
+            ErrorMsg.TextColor3 = CONFIG.COLORS.ONLINE
+            ErrorMsg.Text = "✅ Clé générée et copiée!"
+        else
+            ErrorMsg.TextColor3 = CONFIG.COLORS.DANGER
+            ErrorMsg.Text = "⚠️ " .. (err or "Erreur")
+        end
+    end)
+    
+    ValidateBtn.MouseButton1Click:Connect(function()
+        local key = KeyInput.Text
+        local valid, premium = KeySystem:Validate(key)
+        
+        if valid then
+            ErrorMsg.TextColor3 = CONFIG.COLORS.ONLINE
+            ErrorMsg.Text = premium and "✅ Clé PREMIUM! Chargement..." or "✅ Clé valide! Chargement..."
+            ValidateBtn.Text = "⏳ Chargement..."
+            task.wait(1)
+            KeySG:Destroy()
+            -- Lance l'UI principale
+            AntiCheat:Bypass()
+            UI:Build(premium)
+        else
+            ErrorMsg.Text = "❌ Clé invalide. Format: BANANA-XXXX-XXXX-XXXX"
+            MakeTween(Card, {Position = UDim2.new(0.5,-215,0.5,-160)}, 0.05)
+            task.wait(0.05)
+            MakeTween(Card, {Position = UDim2.new(0.5,-205,0.5,-160)}, 0.05)
+            task.wait(0.05)
+            MakeTween(Card, {Position = UDim2.new(0.5,-210,0.5,-160)}, 0.05)
+        end
+    end)
+    
+    -- Animation entrée
+    Card.Position = UDim2.new(0.5,-210,1.5,0)
+    MakeTween(Card, {Position = UDim2.new(0.5,-210,0.5,-160)}, 0.4)
+end
+
+-- ══════════════════════════════════════════
+--  LAUNCH
+-- ══════════════════════════════════════════
+
+-- Bypass anti-cheat au démarrage
+AntiCheat:Bypass()
+
+-- Écran de clé
+UI:ShowKeyScreen()
+
+--[[
+    BILAN TECHNIQUE:
+    
+    ┌─ Key System ─────────────────────────────────────────┐
+    │  • Génération: format BANANA-XXXX-XXXX-XXXX          │
+    │  • Cooldown 24h via writefile (si executor supporte) │
+    │  • Webhook Discord sur génération ET utilisation     │
+    │  • Détection clé PREMIUM (format PREMIUM-XXXX-...)   │
+    └──────────────────────────────────────────────────────┘
+    ┌─ Anti-Cheat Bypass ──────────────────────────────────┐
+    │  • Hook __namecall pour filtrer FireServer           │
+    │  • Blacklist remotes d'anti-cheat par nom            │
+    │  • Teleport stealth via lerp (anti-teleport check)   │
+    │  • Disable LocalScripts anti-cheat du PlayerScripts  │
+    └──────────────────────────────────────────────────────┘
+    ┌─ Executor Compatibility ─────────────────────────────┐
+    │  PC:     Synapse X, KRNL, Fluxus                     │
+    │  Mobile: Delta, Hydrogen, Arceus X                   │
+    │  UI:     Drag (PC) / FloatBtn toggle (Mobile)        │
+    │  Toggle: [Insert] key (PC) / bouton 🍌 (Mobile)     │
+    └──────────────────────────────────────────────────────┘
+]]
