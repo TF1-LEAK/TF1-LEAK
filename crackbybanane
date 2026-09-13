@@ -25,14 +25,16 @@
 --  CONFIG — mets tes vraies URLs ici
 -- ══════════════════════════════════════════
 
-local WEBHOOK_URL = "https://canary.discord.com/api/webhooks/1548732135567790121/fO00koDwFrwRK7YIrb5M1ZbNwmHvHSYpHaAtdE6sxXXByH7hVqMxFIxnQucFDLZvPh1N"
+local CONFIG = {
+    -- Ton webhook Discord (génération de clés)
+    WEBHOOK_URL = "https://canary.discord.com/api/webhooks/1548737035186208860/5n5fwrBgGq9nCfbwJRjw7uaIB3ut1zXmQTngYccWt9FHte9fqDUmmw8zjbUGQBuSSE_L",
     
     -- Ton endpoint de validation (voir serveur Python bas du script)
     -- Ex: "https://ton-vps.com:5000/validate"
     -- Ex replit: "https://banana-keys.tonnom.replit.app/validate"
     VALIDATE_URL = "https://TON_ENDPOINT/validate",
     
-    KEYGEN_COOLDOWN = 1,  -- 24h
+    KEYGEN_COOLDOWN = 86400,  -- 24h
     
     COLORS = {
         BG_MAIN      = Color3.fromRGB(10, 10, 20),
