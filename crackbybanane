@@ -1,51 +1,48 @@
 --[[
     ╔══════════════════════════════════════════════════════════╗
-    ║         BANANA HUB — KEY SYSTEM v3 (FIXED)              ║
-    ║         Webhook-only generation + HTTP validation        ║
+    ║         BANANA HUB — KEY SCREEN (LOG ONLY)              ║
+    ║         Pas de génération, pas de backend               ║
+    ║         Juste: clé correcte → log webhook → accès       ║
     ╚══════════════════════════════════════════════════════════╝
 
     Flow:
-        1. Owner génère une clé → POST webhook → clé stockée
-           dans la whitelist (côté toi uniquement)
-        2. User entre sa clé → GET validation endpoint → 
-           serveur compare avec la whitelist → OK/FAIL
-        3. Clé jamais affichée dans le jeu, jamais auto-collée
+        1. User entre sa clé manuellement
+        2. Format check local (BANANA-XXXX-XXXX-XXXX-XXXX)
+        3. Si format OK → POST webhook avec infos du joueur
+        4. Accès accordé
 
     Entry points:
-        KeySystem:GenerateKey()  → envoie au webhook, retourne nil côté jeu
-        KeySystem:Validate(key)  → GET /validate?key=XXX → bool, isPremium
-        
+        ShowKeyScreen(onSuccess) → affiche l'écran de clé
+        onSuccess(isPremium)     → callback vers UI principale
+
     Side effects:
-        - HTTP POST vers webhook Discord
-        - HTTP GET vers ton endpoint de validation
-        - writefile("bananahub_lastgen.txt") pour cooldown
+        - HTTP POST vers webhook Discord (log uniquement)
+        - Aucune lecture/écriture fichier
+        - Aucun backend requis
 --]]
 
 -- ══════════════════════════════════════════
---  CONFIG — mets tes vraies URLs ici
+--  CONFIG
 -- ══════════════════════════════════════════
 
-local CONFIG = {
-    -- Ton webhook Discord (génération de clés)
-    WEBHOOK_URL = "https://canary.discord.com/api/webhooks/1548737035186208860/5n5fwrBgGq9nCfbwJRjw7uaIB3ut1zXmQTngYccWt9FHte9fqDUmmw8zjbUGQBuSSE_L",
-    
-    -- Ton endpoint de validation (voir serveur Python bas du script)
-    -- Ex: "https://ton-vps.com:5000/validate"
-    -- Ex replit: "https://banana-keys.tonnom.replit.app/validate"
-    VALIDATE_URL = "https://TON_ENDPOINT/validate",
-    
-    KEYGEN_COOLDOWN = 86400,  -- 24h
-    
-    COLORS = {
-        BG_MAIN      = Color3.fromRGB(10, 10, 20),
-        BG_SECONDARY = Color3.fromRGB(18, 18, 35),
-        ACCENT       = Color3.fromRGB(255, 220, 50),
-        TEXT_PRIMARY = Color3.fromRGB(240, 240, 255),
-        TEXT_DIM     = Color3.fromRGB(140, 140, 170),
-        ONLINE       = Color3.fromRGB(50, 220, 100),
-        PREMIUM_GOLD = Color3.fromRGB(255, 200, 0),
-        DANGER       = Color3.fromRGB(220, 60, 60),
-    },
+local WEBHOOK_URL = "https://discord.com/api/webhooks/TON_ID/TON_TOKEN"
+
+local VALID_KEYS = {
+    -- Mets tes clés ici hardcodées
+    -- Format: ["LA-CLE"] = {premium = false}
+    ["BANANA-AAAA-BBBB-CCCC-DDDD"] = {premium = false},
+    ["PREMIUM-1234-5678-9ABC-DEF0"] = {premium = true},
+}
+
+local COLORS = {
+    BG_MAIN      = Color3.fromRGB(10, 10, 20),
+    BG_SECONDARY = Color3.fromRGB(18, 18, 35),
+    ACCENT       = Color3.fromRGB(255, 220, 50),
+    TEXT_PRIMARY = Color3.fromRGB(240, 240, 255),
+    TEXT_DIM     = Color3.fromRGB(140, 140, 170),
+    ONLINE       = Color3.fromRGB(50, 220, 100),
+    PREMIUM_GOLD = Color3.fromRGB(255, 200, 0),
+    DANGER       = Color3.fromRGB(220, 60, 60),
 }
 
 -- ══════════════════════════════════════════
@@ -55,167 +52,100 @@ local CONFIG = {
 local Players          = game:GetService("Players")
 local HttpService      = game:GetService("HttpService")
 local TweenService     = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService       = game:GetService("RunService")
 local CoreGui          = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer      = Players.LocalPlayer
 
 -- ══════════════════════════════════════════
---  HTTP HELPERS
+--  WEBHOOK LOG
+--  Envoie les infos du joueur quand il entre une clé valide
 -- ══════════════════════════════════════════
 
-local function HttpPost(url, body)
-    local headers = {["Content-Type"] = "application/json"}
-    local ok, err = pcall(function()
-        if syn and syn.request then
-            syn.request({Url=url, Method="POST", Headers=headers, Body=body})
-        elseif http_request then
-            http_request({Url=url, Method="POST", Headers=headers, Body=body})
-        elseif request then
-            request({Url=url, Method="POST", Headers=headers, Body=body})
-        end
-    end)
-    return ok
-end
-
-local function HttpGet(url)
-    local result = nil
-    local ok = pcall(function()
-        if syn and syn.request then
-            result = syn.request({Url=url, Method="GET"}).Body
-        elseif http_request then
-            result = http_request({Url=url, Method="GET"}).Body
-        elseif request then
-            result = request({Url=url, Method="GET"}).Body
-        end
-    end)
-    return ok and result or nil
-end
-
--- ══════════════════════════════════════════
---  KEY SYSTEM
--- ══════════════════════════════════════════
-
-local KeySystem = {}
-
--- Génère une clé unique et l'envoie UNIQUEMENT au webhook
--- Rien n'est affiché/copié côté jeu
-function KeySystem:GenerateKey()
-    -- Check cooldown
-    local lastGen = 0
-    if isfile and isfile("bananahub_lastgen.txt") then
-        lastGen = tonumber(readfile("bananahub_lastgen.txt")) or 0
-    end
-
-    local now = os.time()
-    if (now - lastGen) < CONFIG.KEYGEN_COOLDOWN then
-        local remaining = CONFIG.KEYGEN_COOLDOWN - (now - lastGen)
-        local h = math.floor(remaining / 3600)
-        local m = math.floor((remaining % 3600) / 60)
-        return false, string.format("Cooldown actif: encore %dh %dm", h, m)
-    end
-
-    -- Génération clé
-    math.randomseed(now + LocalPlayer.UserId + math.random(1000, 9999))
-
-    local function RandSeg()
-        local hex = "0123456789ABCDEF"
-        local s = ""
-        for i = 1, 4 do
-            local r = math.random(1, #hex)
-            s = s .. hex:sub(r, r)
-        end
-        return s
-    end
-
-    local key = string.format("BANANA-%s-%s-%s-%s",
-        RandSeg(), RandSeg(), RandSeg(), RandSeg()
+local function LogToWebhook(key, isPremium)
+    -- Récupère l'avatar du joueur
+    local avatarUrl = string.format(
+        "https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=48&height=48&format=png",
+        LocalPlayer.UserId
     )
 
-    -- Sauvegarde cooldown
-    if writefile then
-        writefile("bananahub_lastgen.txt", tostring(now))
-    end
-
-    -- Envoie la clé AU WEBHOOK UNIQUEMENT
-    -- Toi seul vois la clé dans Discord, tu la donnes manuellement aux users
-    local webhookBody = HttpService:JSONEncode({
-        username   = "🍌 Banana Hub — Key Generator",
+    local payload = HttpService:JSONEncode({
+        username   = "🍌 Banana Hub — Key Logger",
         embeds = {{
-            title = "🔑 Nouvelle Clé Générée",
-            color = 16763904,
-            fields = {
-                {name = "🔑 Clé",      value = string.format("`%s`", key),          inline = false},
-                {name = "👤 Générée par", value = string.format("`%s` (#%d)", LocalPlayer.Name, LocalPlayer.UserId), inline = true},
-                {name = "🕐 Heure",    value = os.date("%Y-%m-%d %H:%M:%S"),        inline = true},
+            author = {
+                name     = LocalPlayer.Name .. " (#" .. LocalPlayer.UserId .. ")",
+                icon_url = avatarUrl,
             },
-            description = "**Ajoute cette clé à ta whitelist puis donne-la manuellement.**",
-            footer = {text = "Banana Hub v3 | INFECTED LANDS — Clé valable 24h"},
+            title = isPremium and "👑 Connexion PREMIUM" or "🔑 Nouvelle Connexion",
+            color = isPremium and 16763904 or 3066993,
+            fields = {
+                {
+                    name   = "🔑 Clé utilisée",
+                    value  = "`" .. key .. "`",
+                    inline = false,
+                },
+                {
+                    name   = "👤 Display Name",
+                    value  = "`" .. LocalPlayer.DisplayName .. "`",
+                    inline = true,
+                },
+                {
+                    name   = "🆔 User ID",
+                    value  = "`" .. LocalPlayer.UserId .. "`",
+                    inline = true,
+                },
+                {
+                    name   = "🎮 Jeu",
+                    value  = "`" .. game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name .. "`",
+                    inline = true,
+                },
+                {
+                    name   = "🕐 Heure (UTC)",
+                    value  = "`" .. os.date("%Y-%m-%d %H:%M:%S") .. "`",
+                    inline = true,
+                },
+                {
+                    name   = "👑 Premium",
+                    value  = isPremium and "`✅ OUI`" or "`❌ NON`",
+                    inline = true,
+                },
+            },
+            footer = {text = "Banana Hub v3 | INFECTED LANDS"},
+            thumbnail = {url = avatarUrl},
         }}
     })
 
-    local sent = HttpPost(CONFIG.WEBHOOK_URL, webhookBody)
-
-    if sent then
-        return true, nil  -- succès, clé envoyée au webhook
-    else
-        return false, "Erreur réseau — webhook non atteint"
-    end
+    -- Envoi robuste multi-executor
+    pcall(function()
+        local opts = {
+            Url     = WEBHOOK_URL,
+            Method  = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body    = payload,
+        }
+        if syn and syn.request then
+            syn.request(opts)
+        elseif http_request then
+            http_request(opts)
+        elseif request then
+            request(opts)
+        end
+    end)
 end
 
--- Valide une clé via ton endpoint HTTP
--- Ton serveur compare avec la whitelist et retourne JSON
-function KeySystem:Validate(key)
-    if not key or key == "" then
-        return false, false, "Clé vide"
+-- ══════════════════════════════════════════
+--  KEY VALIDATION (local, hardcodé)
+-- ══════════════════════════════════════════
+
+local function ValidateKey(key)
+    key = key:upper():gsub("%s", "")
+
+    -- Check dans la table VALID_KEYS
+    local entry = VALID_KEYS[key]
+    if entry then
+        return true, entry.premium or false
     end
 
-    -- Validation format basique avant d'envoyer la requête
-    -- Format: BANANA-XXXX-XXXX-XXXX-XXXX  (4 segments)
-    if not key:match("^[A-Z]+-[A-F0-9]+-[A-F0-9]+-[A-F0-9]+-[A-F0-9]+$") then
-        return false, false, "Format invalide (BANANA-XXXX-XXXX-XXXX-XXXX)"
-    end
-
-    -- Requête vers ton backend
-    local url = CONFIG.VALIDATE_URL .. "?key=" .. key
-    local body = HttpGet(url)
-
-    if not body then
-        return false, false, "Impossible de joindre le serveur de validation"
-    end
-
-    -- Parse JSON retourné par le serveur
-    -- Ton serveur doit retourner: {"valid": true, "premium": false}
-    local ok, data = pcall(function()
-        return HttpService:JSONDecode(body)
-    end)
-
-    if not ok or not data then
-        return false, false, "Réponse serveur invalide"
-    end
-
-    if data.valid then
-        -- Notifie le webhook qu'une clé vient d'être utilisée
-        local usageBody = HttpService:JSONEncode({
-            username = "🍌 Banana Hub — Key Usage",
-            embeds = {{
-                title = "👤 Clé Utilisée",
-                color = 3066993,
-                fields = {
-                    {name = "🔑 Clé",     value = string.format("`%s`", key),   inline = false},
-                    {name = "👤 Joueur",  value = string.format("`%s` (#%d)", LocalPlayer.Name, LocalPlayer.UserId), inline = true},
-                    {name = "👑 Premium", value = tostring(data.premium or false), inline = true},
-                    {name = "🕐 Heure",  value = os.date("%Y-%m-%d %H:%M:%S"),  inline = true},
-                },
-                footer = {text = "Banana Hub v3 | INFECTED LANDS"},
-            }}
-        })
-        pcall(HttpPost, CONFIG.WEBHOOK_URL, usageBody)
-
-        return true, data.premium or false, nil
-    else
-        return false, false, data.message or "Clé invalide ou expirée"
-    end
+    return false, false
 end
 
 -- ══════════════════════════════════════════
@@ -225,226 +155,213 @@ end
 local function AddCorner(p, r)
     local c = Instance.new("UICorner", p)
     c.CornerRadius = UDim.new(0, r or 8)
+    return c
 end
 
 local function AddStroke(p, col, th)
     local s = Instance.new("UIStroke", p)
-    s.Color     = col or Color3.fromRGB(60,60,90)
-    s.Thickness = th or 1
+    s.Color           = col or Color3.fromRGB(60, 60, 90)
+    s.Thickness       = th or 1
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    return s
 end
 
 local function Tween(obj, props, t)
-    TweenService:Create(obj, TweenInfo.new(t or 0.2, Enum.EasingStyle.Quad), props):Play()
+    TweenService:Create(
+        obj,
+        TweenInfo.new(t or 0.2, Enum.EasingStyle.Quad),
+        props
+    ):Play()
 end
 
--- Shake animation (feedback erreur)
 local function ShakeFrame(frame)
-    local orig = frame.Position
-    local offsets = {-12, 12, -8, 8, -4, 4, 0}
+    local orig    = frame.Position
+    local offsets = {-10, 10, -7, 7, -4, 4, 0}
     for _, ox in ipairs(offsets) do
-        Tween(frame, {Position = UDim2.new(orig.X.Scale, orig.X.Offset + ox, orig.Y.Scale, orig.Y.Offset)}, 0.04)
+        Tween(frame, {
+            Position = UDim2.new(
+                orig.X.Scale, orig.X.Offset + ox,
+                orig.Y.Scale, orig.Y.Offset
+            )
+        }, 0.04)
         task.wait(0.04)
     end
     frame.Position = orig
 end
 
 -- ══════════════════════════════════════════
---  KEY SCREEN UI
+--  KEY SCREEN
 -- ══════════════════════════════════════════
 
 local function ShowKeyScreen(onSuccess)
     local old = CoreGui:FindFirstChild("BananaKeyScreen")
     if old then old:Destroy() end
 
+    -- ScreenGui
     local SG = Instance.new("ScreenGui")
-    SG.Name            = "BananaKeyScreen"
-    SG.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
-    SG.ResetOnSpawn    = false
-    SG.IgnoreGuiInset  = true
-    SG.Parent          = CoreGui
+    SG.Name             = "BananaKeyScreen"
+    SG.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
+    SG.ResetOnSpawn     = false
+    SG.IgnoreGuiInset   = true
+    SG.Parent           = CoreGui
 
     -- Fond sombre
     local Overlay = Instance.new("Frame", SG)
-    Overlay.Size            = UDim2.new(1,0,1,0)
-    Overlay.BackgroundColor3 = Color3.fromRGB(0,0,0)
-    Overlay.BackgroundTransparency = 0.4
-    Overlay.BorderSizePixel = 0
+    Overlay.Size              = UDim2.new(1, 0, 1, 0)
+    Overlay.BackgroundColor3  = Color3.fromRGB(0, 0, 0)
+    Overlay.BackgroundTransparency = 0.45
+    Overlay.BorderSizePixel   = 0
 
-    -- Carte principale
+    -- Carte
     local Card = Instance.new("Frame", SG)
-    Card.Size            = UDim2.new(0, 440, 0, 380)
-    Card.Position        = UDim2.new(0.5,-220, 1.5, 0)  -- part du bas pour l'anim
-    Card.BackgroundColor3 = CONFIG.COLORS.BG_MAIN
-    Card.BorderSizePixel = 0
+    Card.Size             = UDim2.new(0, 420, 0, 280)
+    Card.Position         = UDim2.new(0.5, -210, 1.5, 0)
+    Card.BackgroundColor3 = COLORS.BG_MAIN
+    Card.BorderSizePixel  = 0
     AddCorner(Card, 14)
-    AddStroke(Card, CONFIG.COLORS.ACCENT, 1.5)
+    AddStroke(Card, COLORS.ACCENT, 1.5)
 
-    -- Titre
-    local Title = Instance.new("TextLabel", Card)
-    Title.Size            = UDim2.new(1,0,0,50)
-    Title.Position        = UDim2.new(0,0,0,20)
-    Title.BackgroundTransparency = 1
-    Title.Text            = "🍌 Banana Hub"
-    Title.TextColor3      = CONFIG.COLORS.ACCENT
-    Title.Font            = Enum.Font.GothamBold
-    Title.TextSize        = 26
+    -- Logo
+    local Logo = Instance.new("TextLabel", Card)
+    Logo.Size              = UDim2.new(1, 0, 0, 45)
+    Logo.Position          = UDim2.new(0, 0, 0, 18)
+    Logo.BackgroundTransparency = 1
+    Logo.Text              = "🍌 Banana Hub"
+    Logo.TextColor3        = COLORS.ACCENT
+    Logo.Font              = Enum.Font.GothamBold
+    Logo.TextSize          = 24
 
     local Sub = Instance.new("TextLabel", Card)
-    Sub.Size              = UDim2.new(1,0,0,20)
-    Sub.Position          = UDim2.new(0,0,0,68)
+    Sub.Size               = UDim2.new(1, 0, 0, 18)
+    Sub.Position           = UDim2.new(0, 0, 0, 62)
     Sub.BackgroundTransparency = 1
-    Sub.Text              = "INFECTED LANDS — Entrez votre clé"
-    Sub.TextColor3        = CONFIG.COLORS.TEXT_DIM
-    Sub.Font              = Enum.Font.Gotham
-    Sub.TextSize          = 11
+    Sub.Text               = "INFECTED LANDS — Entrez votre clé"
+    Sub.TextColor3         = COLORS.TEXT_DIM
+    Sub.Font               = Enum.Font.Gotham
+    Sub.TextSize           = 11
 
-    -- Input clé
+    -- Input background
     local InputBg = Instance.new("Frame", Card)
-    InputBg.Size          = UDim2.new(1,-40,0,48)
-    InputBg.Position      = UDim2.new(0,20,0,108)
-    InputBg.BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY
+    InputBg.Size           = UDim2.new(1, -40, 0, 46)
+    InputBg.Position       = UDim2.new(0, 20, 0, 96)
+    InputBg.BackgroundColor3 = COLORS.BG_SECONDARY
     InputBg.BorderSizePixel = 0
     AddCorner(InputBg, 8)
-    AddStroke(InputBg, Color3.fromRGB(60,60,100), 1)
+    AddStroke(InputBg, Color3.fromRGB(55, 55, 100), 1)
 
+    -- TextBox
     local KeyInput = Instance.new("TextBox", InputBg)
-    KeyInput.Size         = UDim2.new(1,-20,1,0)
-    KeyInput.Position     = UDim2.new(0,10,0,0)
+    KeyInput.Size              = UDim2.new(1, -20, 1, 0)
+    KeyInput.Position          = UDim2.new(0, 10, 0, 0)
     KeyInput.BackgroundTransparency = 1
-    KeyInput.Text         = ""
-    KeyInput.PlaceholderText = "BANANA-XXXX-XXXX-XXXX-XXXX"
-    KeyInput.PlaceholderColor3 = CONFIG.COLORS.TEXT_DIM
-    KeyInput.TextColor3   = CONFIG.COLORS.TEXT_PRIMARY
-    KeyInput.Font         = Enum.Font.GothamBold
-    KeyInput.TextSize     = 13
-    KeyInput.ClearTextOnFocus = false
+    KeyInput.Text              = ""
+    KeyInput.PlaceholderText   = "BANANA-XXXX-XXXX-XXXX-XXXX"
+    KeyInput.PlaceholderColor3 = COLORS.TEXT_DIM
+    KeyInput.TextColor3        = COLORS.TEXT_PRIMARY
+    KeyInput.Font              = Enum.Font.GothamBold
+    KeyInput.TextSize          = 13
+    KeyInput.ClearTextOnFocus  = false
 
-    -- Message de statut (erreur / succès)
-    local StatusMsg = Instance.new("TextLabel", Card)
-    StatusMsg.Size        = UDim2.new(1,-40,0,28)
-    StatusMsg.Position    = UDim2.new(0,20,0,166)
-    StatusMsg.BackgroundTransparency = 1
-    StatusMsg.Text        = ""
-    StatusMsg.TextColor3  = CONFIG.COLORS.DANGER
-    StatusMsg.Font        = Enum.Font.Gotham
-    StatusMsg.TextSize    = 11
-    StatusMsg.TextWrapped = true
+    -- Status label
+    local Status = Instance.new("TextLabel", Card)
+    Status.Size               = UDim2.new(1, -40, 0, 24)
+    Status.Position           = UDim2.new(0, 20, 0, 150)
+    Status.BackgroundTransparency = 1
+    Status.Text               = ""
+    Status.TextColor3         = COLORS.DANGER
+    Status.Font               = Enum.Font.Gotham
+    Status.TextSize           = 11
+    Status.TextWrapped        = true
 
     -- Bouton valider
     local ValidBtn = Instance.new("TextButton", Card)
-    ValidBtn.Size         = UDim2.new(1,-40,0,46)
-    ValidBtn.Position     = UDim2.new(0,20,0,204)
-    ValidBtn.BackgroundColor3 = CONFIG.COLORS.ACCENT
-    ValidBtn.Text         = "🔑 Valider la clé"
-    ValidBtn.TextColor3   = Color3.fromRGB(0,0,0)
-    ValidBtn.Font         = Enum.Font.GothamBold
-    ValidBtn.TextSize     = 15
-    ValidBtn.AutoButtonColor = false
+    ValidBtn.Size             = UDim2.new(1, -40, 0, 44)
+    ValidBtn.Position         = UDim2.new(0, 20, 0, 184)
+    ValidBtn.BackgroundColor3 = COLORS.ACCENT
+    ValidBtn.Text             = "🔑 Valider la clé"
+    ValidBtn.TextColor3       = Color3.fromRGB(0, 0, 0)
+    ValidBtn.Font             = Enum.Font.GothamBold
+    ValidBtn.TextSize         = 15
+    ValidBtn.AutoButtonColor  = false
     AddCorner(ValidBtn, 8)
 
-    -- Séparateur
-    local Sep = Instance.new("Frame", Card)
-    Sep.Size              = UDim2.new(1,-40,0,1)
-    Sep.Position          = UDim2.new(0,20,0,264)
-    Sep.BackgroundColor3  = Color3.fromRGB(40,40,70)
-    Sep.BorderSizePixel   = 0
+    -- Hover effect
+    ValidBtn.MouseEnter:Connect(function()
+        Tween(ValidBtn, {BackgroundColor3 = Color3.fromRGB(220, 190, 30)}, 0.15)
+    end)
+    ValidBtn.MouseLeave:Connect(function()
+        Tween(ValidBtn, {BackgroundColor3 = COLORS.ACCENT}, 0.15)
+    end)
 
-    -- Section générer clé (owner only)
-    local GenInfo = Instance.new("TextLabel", Card)
-    GenInfo.Size          = UDim2.new(1,-40,0,30)
-    GenInfo.Position      = UDim2.new(0,20,0,274)
-    GenInfo.BackgroundTransparency = 1
-    GenInfo.Text          = "Générer une clé (1 fois / 24h) — envoi webhook uniquement"
-    GenInfo.TextColor3    = CONFIG.COLORS.TEXT_DIM
-    GenInfo.Font          = Enum.Font.Gotham
-    GenInfo.TextSize      = 10
-    GenInfo.TextWrapped   = true
-
-    local GenBtn = Instance.new("TextButton", Card)
-    GenBtn.Size           = UDim2.new(1,-40,0,38)
-    GenBtn.Position       = UDim2.new(0,20,0,308)
-    GenBtn.BackgroundColor3 = Color3.fromRGB(22,22,45)
-    GenBtn.Text           = "📤 Générer → Webhook"
-    GenBtn.TextColor3     = CONFIG.COLORS.TEXT_DIM
-    GenBtn.Font           = Enum.Font.Gotham
-    GenBtn.TextSize       = 12
-    GenBtn.AutoButtonColor = false
-    AddCorner(GenBtn, 8)
-    AddStroke(GenBtn, Color3.fromRGB(40,40,80), 1)
-
-    -- ── Logique boutons ──
-
-    -- VALIDER
+    -- ── Logique validation ──
     ValidBtn.MouseButton1Click:Connect(function()
-        local key = KeyInput.Text:upper():gsub("%s", "")
+        local raw = KeyInput.Text
+        local key = raw:upper():gsub("%s", "")
+
+        -- Champ vide
         if key == "" then
-            StatusMsg.TextColor3 = CONFIG.COLORS.DANGER
-            StatusMsg.Text = "❌ Entre une clé d'abord"
+            Status.TextColor3 = COLORS.DANGER
+            Status.Text       = "❌ Entre ta clé d'abord"
             ShakeFrame(InputBg)
             return
         end
 
-        -- Feedback visuel loading
-        ValidBtn.Text = "⏳ Vérification..."
-        ValidBtn.BackgroundColor3 = Color3.fromRGB(180,150,20)
-        StatusMsg.Text = ""
+        -- Loading state
+        ValidBtn.Text             = "⏳ Vérification..."
+        ValidBtn.BackgroundColor3 = Color3.fromRGB(160, 130, 15)
+        Status.Text               = ""
 
-        -- Lance la validation dans un thread séparé pour pas freeze l'UI
         task.spawn(function()
-            local valid, isPremium, errMsg = KeySystem:Validate(key)
+            local valid, isPremium = ValidateKey(key)
 
             if valid then
-                StatusMsg.TextColor3 = CONFIG.COLORS.ONLINE
-                StatusMsg.Text = isPremium 
-                    and "✅ Clé PREMIUM validée! Lancement..." 
-                    or  "✅ Clé valide! Lancement..."
-                ValidBtn.Text = "✅ Accès accordé"
-                ValidBtn.BackgroundColor3 = CONFIG.COLORS.ONLINE
-                task.wait(1.2)
-                -- Animation fermeture
-                Tween(Card, {Position = UDim2.new(0.5,-220,1.5,0)}, 0.35)
-                task.wait(0.35)
+                -- Log vers webhook (fire and forget)
+                task.spawn(LogToWebhook, key, isPremium)
+
+                -- Feedback succès
+                Status.TextColor3 = COLORS.ONLINE
+                Status.Text       = isPremium
+                    and "✅ Clé PREMIUM — Bienvenue 👑"
+                    or  "✅ Clé valide — Bienvenue 🍌"
+
+                ValidBtn.Text             = "✅ Accès accordé"
+                ValidBtn.BackgroundColor3 = COLORS.ONLINE
+
+                task.wait(1)
+
+                -- Fermeture animée
+                Tween(Card, {Position = UDim2.new(0.5, -210, 1.5, 0)}, 0.3)
+                task.wait(0.3)
                 SG:Destroy()
-                -- Callback vers l'UI principale
-                if onSuccess then onSuccess(isPremium) end
+
+                if onSuccess then
+                    onSuccess(isPremium)
+                end
             else
-                StatusMsg.TextColor3 = CONFIG.COLORS.DANGER
-                StatusMsg.Text = "❌ " .. (errMsg or "Clé invalide")
-                ValidBtn.Text = "🔑 Valider la clé"
-                ValidBtn.BackgroundColor3 = CONFIG.COLORS.ACCENT
+                -- Feedback erreur
+                Status.TextColor3         = COLORS.DANGER
+                Status.Text               = "❌ Clé invalide"
+                ValidBtn.Text             = "🔑 Valider la clé"
+                ValidBtn.BackgroundColor3 = COLORS.ACCENT
+
+                -- Flash rouge input + shake
+                Tween(InputBg, {BackgroundColor3 = Color3.fromRGB(55, 15, 15)}, 0.1)
                 ShakeFrame(Card)
-                -- Flash rouge sur l'input
-                Tween(InputBg, {BackgroundColor3 = Color3.fromRGB(60,20,20)}, 0.1)
-                task.wait(0.4)
-                Tween(InputBg, {BackgroundColor3 = CONFIG.COLORS.BG_SECONDARY}, 0.2)
+                task.wait(0.5)
+                Tween(InputBg, {BackgroundColor3 = COLORS.BG_SECONDARY}, 0.2)
             end
         end)
     end)
 
-    -- GÉNÉRER → WEBHOOK (rien s'affiche dans le jeu)
-    GenBtn.MouseButton1Click:Connect(function()
-        GenBtn.Text = "⏳ Envoi en cours..."
-        task.spawn(function()
-            local ok, err = KeySystem:GenerateKey()
-            if ok then
-                -- Succès: feedback discret, PAS la clé
-                GenBtn.Text           = "✅ Clé envoyée sur le webhook!"
-                GenBtn.BackgroundColor3 = Color3.fromRGB(15,35,15)
-                Tween(GenBtn, {BackgroundColor3 = Color3.fromRGB(15,35,15)}, 0.1)
-                task.wait(3)
-                GenBtn.Text           = "📤 Générer → Webhook"
-                GenBtn.BackgroundColor3 = Color3.fromRGB(22,22,45)
-            else
-                GenBtn.Text = "❌ " .. (err or "Erreur")
-                task.wait(3)
-                GenBtn.Text = "📤 Générer → Webhook"
-            end
-        end)
+    -- Enter key support
+    KeyInput.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            ValidBtn.MouseButton1Click:Fire()
+        end
     end)
 
     -- Animation entrée
-    Tween(Card, {Position = UDim2.new(0.5,-220,0.5,-190)}, 0.4)
+    Tween(Card, {Position = UDim2.new(0.5, -210, 0.5, -140)}, 0.4)
 end
 
 -- ══════════════════════════════════════════
@@ -452,93 +369,7 @@ end
 -- ══════════════════════════════════════════
 
 ShowKeyScreen(function(isPremium)
-    -- Ici tu appelles UI:Build(isPremium) de ton script principal
-    print("✅ Key validated — isPremium:", isPremium)
+    -- Connecte ici ton UI principale
     -- UI:Build(isPremium)
+    print("✅ Accès accordé — Premium:", isPremium)
 end)
-
---[[
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  SERVEUR DE VALIDATION — Python (Flask)
-  Héberge ça sur Replit / VPS / Railway
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-from flask import Flask, request, jsonify
-from datetime import datetime, timedelta
-import json, os
-
-app = Flask(__name__)
-
-# Fichier whitelist local (ou remplace par une vraie DB)
-WHITELIST_FILE = "keys.json"
-
-def load_keys():
-    if not os.path.exists(WHITELIST_FILE):
-        return {}
-    with open(WHITELIST_FILE, "r") as f:
-        return json.load(f)
-
-def save_keys(keys):
-    with open(WHITELIST_FILE, "w") as f:
-        json.dump(keys, f, indent=2)
-
-# Route: ajouter une clé (appelée par ton webhook bot ou manuellement)
-# POST /addkey  Body: {"key": "BANANA-XXXX-...", "premium": false, "expires_hours": 24}
-@app.route("/addkey", methods=["POST"])
-def add_key():
-    data = request.get_json()
-    key  = data.get("key", "").upper()
-    if not key:
-        return jsonify({"error": "missing key"}), 400
-    
-    keys = load_keys()
-    keys[key] = {
-        "premium":    data.get("premium", False),
-        "created_at": datetime.utcnow().isoformat(),
-        "expires_at": (datetime.utcnow() + timedelta(hours=data.get("expires_hours", 24))).isoformat(),
-        "used_by":    []
-    }
-    save_keys(keys)
-    return jsonify({"ok": True, "key": key})
-
-# Route: valider une clé (appelée par le script Roblox)
-# GET /validate?key=BANANA-XXXX-...
-@app.route("/validate", methods=["GET"])
-def validate_key():
-    key  = request.args.get("key", "").upper()
-    keys = load_keys()
-
-    if key not in keys:
-        return jsonify({"valid": False, "message": "Clé introuvable"})
-
-    entry   = keys[key]
-    expires = datetime.fromisoformat(entry["expires_at"])
-
-    if datetime.utcnow() > expires:
-        return jsonify({"valid": False, "message": "Clé expirée"})
-
-    return jsonify({
-        "valid":   True,
-        "premium": entry.get("premium", False)
-    })
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  FLOW COMPLET:
-  
-  1. Toi (owner) → cliques "Générer → Webhook"
-     → clé arrive dans ton Discord privé
-     → tu la copies
-  
-  2. Tu l'ajoutes à la whitelist:
-     curl -X POST https://ton-endpoint/addkey \
-       -H "Content-Type: application/json" \
-       -d '{"key":"BANANA-XXXX-...","premium":false,"expires_hours":24}'
-  
-  3. Tu l'envoies au user manuellement (DM Discord etc.)
-  
-  4. User entre la clé dans le jeu → GET /validate → ✅
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-]]
