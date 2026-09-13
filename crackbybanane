@@ -34,7 +34,7 @@ local CONFIG = {
     -- Ex replit: "https://banana-keys.tonnom.replit.app/validate"
     VALIDATE_URL = "https://TON_ENDPOINT/validate",
     
-    KEYGEN_COOLDOWN = 86400,  -- 24h
+    KEYGEN_COOLDOWN = 1,  -- 24h
     
     COLORS = {
         BG_MAIN      = Color3.fromRGB(10, 10, 20),
