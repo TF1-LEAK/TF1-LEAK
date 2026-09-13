@@ -27,7 +27,7 @@
 
 local CONFIG = {
     -- Ton webhook Discord (génération de clés)
-    WEBHOOK_URL = "https://discord.com/api/webhooks/TON_ID/TON_TOKEN",
+    WEBHOOK_URL = "https://canary.discord.com/api/webhooks/1548732135567790121/fO00koDwFrwRK7YIrb5M1ZbNwmHvHSYpHaAtdE6sxXXByH7hVqMxFIxnQucFDLZvPh1N",
     
     -- Ton endpoint de validation (voir serveur Python bas du script)
     -- Ex: "https://ton-vps.com:5000/validate"
