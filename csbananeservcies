@@ -1,435 +1,1035 @@
--- Blox Strike | BananeService v3 | Synapse X / KRNL / Fluxus
-local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService     = game:GetService("TweenService")
+--------------------------------------------------
+-- BANANE SERVICE DISCORD GATE
+--------------------------------------------------
 
-local lp  = Players.LocalPlayer
-local cam = workspace.CurrentCamera
+local DISCORD_URL = "https://discord.gg/Gc2zKtGadB"
 
--- ─── CONFIG ───────────────────────────────────────────────────────────────────
-local cfg = {
-    Aimbot       = true,
-    SilentAim    = true,
-    ShowFOV      = true,
-    TeamCheck    = true,
-    FOV          = 150,
-    AimSmooth    = 0.15,
-    AimBone      = "Head",
-    TriggerBot   = false,
-    TriggerDelay = 0.08,
-    ESP          = true,
-    ESPBox       = true,
-    ESPSkeleton  = true,
-    ESPName      = true,
-    ESPHealth    = true,
-    ESPDist      = true,
+local function createDiscordGate()
+    local Players    = game:GetService("Players")
+    local CoreGui    = game:GetService("CoreGui")
+    local GuiService = game:GetService("GuiService")
+    local LP         = Players.LocalPlayer
+
+    local gateGui = Instance.new("ScreenGui")
+    gateGui.Name           = "BananeService_DiscordGate"
+    gateGui.ResetOnSpawn   = false
+    gateGui.IgnoreGuiInset = true
+    gateGui.DisplayOrder   = 1000000
+
+    local mounted = false
+    if gethui then
+        local ok, parent = pcall(gethui)
+        if ok and parent then gateGui.Parent = parent; mounted = true end
+    end
+    if not mounted then
+        local ok = pcall(function() gateGui.Parent = CoreGui end)
+        if not ok then gateGui.Parent = LP:WaitForChild("PlayerGui") end
+    end
+
+    local overlay = Instance.new("Frame")
+    overlay.Size = UDim2.fromScale(1,1)
+    overlay.BackgroundColor3 = Color3.fromRGB(7,6,2)
+    overlay.BackgroundTransparency = 0.1
+    overlay.BorderSizePixel = 0
+    overlay.Parent = gateGui
+
+    local win = Instance.new("Frame")
+    win.AnchorPoint = Vector2.new(0.5,0.5)
+    win.Position    = UDim2.fromScale(0.5,0.5)
+    win.Size        = UDim2.fromOffset(440,260)
+    win.BackgroundColor3 = Color3.fromRGB(14,10,2)
+    win.BorderSizePixel  = 0
+    win.Parent = overlay
+    Instance.new("UICorner",win).CornerRadius = UDim.new(0,14)
+    local ws = Instance.new("UIStroke",win)
+    ws.Color = Color3.fromRGB(255,175,0); ws.Thickness = 2
+
+    -- crown + title
+    local ttl = Instance.new("TextLabel",win)
+    ttl.Position = UDim2.fromOffset(20,18); ttl.Size = UDim2.new(1,-40,0,30)
+    ttl.BackgroundTransparency = 1; ttl.Text = "👑  BANANE SERVICE"
+    ttl.TextColor3 = Color3.fromRGB(255,175,0); ttl.Font = Enum.Font.GothamBold
+    ttl.TextSize = 22; ttl.TextXAlignment = Enum.TextXAlignment.Left
+
+    local sub = Instance.new("TextLabel",win)
+    sub.Position = UDim2.fromOffset(20,52); sub.Size = UDim2.new(1,-40,0,36)
+    sub.BackgroundTransparency = 1
+    sub.Text = "Rejoins le Discord officiel avant de continuer."
+    sub.TextWrapped = true; sub.TextColor3 = Color3.fromRGB(160,140,80)
+    sub.Font = Enum.Font.Gotham; sub.TextSize = 12
+    sub.TextXAlignment = Enum.TextXAlignment.Left
+
+    local status = Instance.new("TextLabel",win)
+    status.Position = UDim2.fromOffset(20,100); status.Size = UDim2.new(1,-40,0,28)
+    status.BackgroundTransparency = 1; status.Text = "Connexion Discord requise."
+    status.TextColor3 = Color3.fromRGB(255,175,0); status.Font = Enum.Font.Gotham
+    status.TextSize = 11; status.TextXAlignment = Enum.TextXAlignment.Left
+
+    -- Connect button
+    local cbtn = Instance.new("TextButton",win)
+    cbtn.Position = UDim2.fromOffset(20,146); cbtn.Size = UDim2.new(0.5,-26,0,44)
+    cbtn.BackgroundColor3 = Color3.fromRGB(200,140,0); cbtn.BorderSizePixel = 0
+    cbtn.Text = "Rejoindre Discord"; cbtn.TextColor3 = Color3.fromRGB(10,8,2)
+    cbtn.Font = Enum.Font.GothamBold; cbtn.TextSize = 13
+    Instance.new("UICorner",cbtn).CornerRadius = UDim.new(0,9)
+
+    -- Continue button
+    local contbtn = Instance.new("TextButton",win)
+    contbtn.Position = UDim2.new(0.5,6,0,146); contbtn.Size = UDim2.new(0.5,-26,0,44)
+    contbtn.BackgroundColor3 = Color3.fromRGB(30,22,4); contbtn.BorderSizePixel = 0
+    contbtn.Text = "Continuer"; contbtn.TextColor3 = Color3.fromRGB(100,80,30)
+    contbtn.Font = Enum.Font.GothamBold; contbtn.TextSize = 13
+    contbtn.AutoButtonColor = false
+    Instance.new("UICorner",contbtn).CornerRadius = UDim.new(0,9)
+
+    local footer = Instance.new("TextLabel",win)
+    footer.Position = UDim2.fromOffset(20,212); footer.Size = UDim2.new(1,-40,0,20)
+    footer.BackgroundTransparency = 1; footer.Text = DISCORD_URL
+    footer.TextColor3 = Color3.fromRGB(80,60,20); footer.Font = Enum.Font.Gotham
+    footer.TextSize = 10; footer.TextXAlignment = Enum.TextXAlignment.Left
+
+    local connected = false
+    local event = Instance.new("BindableEvent")
+
+    local function markConnected()
+        if connected then return end; connected = true
+        status.TextColor3 = Color3.fromRGB(90,235,150)
+        status.Text = "Discord ouvert ! Rejoins puis clique Continuer."
+        contbtn.BackgroundColor3 = Color3.fromRGB(200,140,0)
+        contbtn.TextColor3 = Color3.fromRGB(10,8,2)
+        contbtn.AutoButtonColor = true
+    end
+
+    cbtn.MouseButton1Click:Connect(function()
+        pcall(function() GuiService:OpenBrowserWindow(DISCORD_URL) end)
+        if setclipboard then pcall(setclipboard, DISCORD_URL) end
+        markConnected()
+    end)
+
+    contbtn.MouseButton1Click:Connect(function()
+        if not connected then
+            status.TextColor3 = Color3.fromRGB(255,80,80)
+            status.Text = "Rejoins le Discord d'abord."
+            return
+        end
+        gateGui:Destroy(); event:Fire()
+    end)
+
+    event.Event:Wait(); event:Destroy()
+    return true
+end
+
+if not createDiscordGate() then return end
+
+--------------------------------------------------
+-- BANANE SERVICE V1
+-- Aimbot + ESP/Wallhack + Hitbox + Viewmodel + Wallbang + Potato
+-- Keybinds: RightShift=Menu | Q=Aimbot | X=ESP | V=Wallbang | P=Potato | Delete=Unload
+--------------------------------------------------
+
+local ENV = getgenv and getgenv() or _G
+if ENV.BananeService and ENV.BananeService.Unload then
+    pcall(ENV.BananeService.Unload)
+end
+
+local Players    = game:GetService("Players")
+local UIS        = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui    = game:GetService("CoreGui")
+local Lighting   = game:GetService("Lighting")
+
+local LP     = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local CFG = {
+    TeamCheck       = true,
+    TeamRadius      = 30,
+    Aimbot          = false,
+    AimHoldRMB      = true,
+    AimVisibleCheck = true,
+    AimHead         = true,
+    AimFOV          = 180,
+    AimSmooth       = 12,
+    AimMaxDistance  = 2500,
+    ESP             = true,
+    Highlight       = true,
+    HighlightFill   = true,
+    BoxESP          = true,
+    Name            = true,
+    Health          = true,
+    Distance        = true,
+    MaxDistance     = 2200,
+    ESPUpdateRate   = 0.08,
+    ViewmodelEnabled= false,
+    ViewmodelFOV    = 75,
+    ViewmodelX      = 0,
+    ViewmodelY      = 0,
+    ViewmodelZ      = 0,
+    PotatoMode      = false,
+    HeadExpand      = false,
+    HeadSize        = 6,
+    HeadTransparency= 0.55,
+    Wallbang        = false,
+    PenetrationDepth= 3,
+    MenuKey         = Enum.KeyCode.RightShift,
+    AimbotKey       = Enum.KeyCode.Q,
+    ESPKey          = Enum.KeyCode.X,
+    WallbangKey     = Enum.KeyCode.V,
+    PotatoKey       = Enum.KeyCode.P,
+    UnloadKey       = Enum.KeyCode.Delete,
 }
 
--- ─── UTIL ─────────────────────────────────────────────────────────────────────
-local function getChar(p)  return p.Character end
-local function getHum(p)   local c=getChar(p); return c and c:FindFirstChildOfClass("Humanoid") end
-local function getRoot(p)  local c=getChar(p); return c and c:FindFirstChild("HumanoidRootPart") end
-local function getPart(p,n) local c=getChar(p); return c and (c:FindFirstChild(n) or c:FindFirstChild("HumanoidRootPart")) end
-local function alive(p)    local h=getHum(p); return h and h.Health>0 end
-local function sameTeam(p) return cfg.TeamCheck and p.Team==lp.Team end
+-- ─── PALETTE ──────────────────────────────────────────────────────────────────
+local T = {
+    Bg      = Color3.fromRGB(10, 8, 1),
+    Panel   = Color3.fromRGB(16, 12, 2),
+    Card    = Color3.fromRGB(22, 16, 3),
+    Card2   = Color3.fromRGB(30, 22, 4),
+    Border  = Color3.fromRGB(80, 58, 8),
+    Text    = Color3.fromRGB(255, 235, 180),
+    Dim     = Color3.fromRGB(160, 130, 60),
+    Accent  = Color3.fromRGB(255, 175, 0),
+    Accent2 = Color3.fromRGB(255, 210, 80),
+    Green   = Color3.fromRGB(90, 225, 144),
+    Red     = Color3.fromRGB(255, 83, 105),
+    Enemy   = Color3.fromRGB(255, 160, 0),
+    Team    = Color3.fromRGB(80, 200, 255),
+    White   = Color3.new(1,1,1),
+}
 
-local sw,sh = cam.ViewportSize.X, cam.ViewportSize.Y
+local running     = true
+local connections = {}
+local ESP         = {}
+local originalHeads = {}
+local roundTeam   = {}
+local roundActive = false
+local roundEndedAt= 0
+local roundNumber = 0
+local aimHeld     = false
+local refreshAllESP
 
-local function toScreen(pos)
-    local s,vis = cam:WorldToViewportPoint(pos)
-    return Vector2.new(s.X,s.Y), s.Z, vis
+-- ─── POTATO ───────────────────────────────────────────────────────────────────
+local origLighting = {
+    GlobalShadows          = Lighting.GlobalShadows,
+    EnvironmentDiffuseScale= Lighting.EnvironmentDiffuseScale,
+    EnvironmentSpecularScale=Lighting.EnvironmentSpecularScale,
+    FogEnd                 = Lighting.FogEnd,
+}
+local origEffects = {}
+local terrain = workspace:FindFirstChildOfClass("Terrain")
+local origDecoration = nil
+if terrain then pcall(function() origDecoration = terrain.Decoration end) end
+for _, c in ipairs(Lighting:GetChildren()) do
+    if c:IsA("PostEffect") then origEffects[c] = c.Enabled end
 end
 
-local function inFOV(sp)
-    local dx=sp.X-sw/2; local dy=sp.Y-sh/2
-    return math.sqrt(dx*dx+dy*dy)<=cfg.FOV
-end
-
-local function enemies()
-    local out={}
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p~=lp and not sameTeam(p) and alive(p) and getRoot(p) then
-            out[#out+1]=p
+local function applyPotatoMode(enabled)
+    CFG.PotatoMode = enabled == true
+    if CFG.PotatoMode then
+        pcall(function() Lighting.GlobalShadows = false end)
+        pcall(function() Lighting.EnvironmentDiffuseScale = 0 end)
+        pcall(function() Lighting.EnvironmentSpecularScale = 0 end)
+        pcall(function() Lighting.FogEnd = 1e6 end)
+        if terrain then pcall(function() terrain.Decoration = false end) end
+        for _, c in ipairs(Lighting:GetChildren()) do
+            if c:IsA("PostEffect") then
+                origEffects[c] = origEffects[c] ~= nil and origEffects[c] or c.Enabled
+                pcall(function() c.Enabled = false end)
+            end
+        end
+    else
+        pcall(function() Lighting.GlobalShadows           = origLighting.GlobalShadows end)
+        pcall(function() Lighting.EnvironmentDiffuseScale = origLighting.EnvironmentDiffuseScale end)
+        pcall(function() Lighting.EnvironmentSpecularScale= origLighting.EnvironmentSpecularScale end)
+        pcall(function() Lighting.FogEnd                  = origLighting.FogEnd end)
+        if terrain and origDecoration ~= nil then
+            pcall(function() terrain.Decoration = origDecoration end)
+        end
+        for eff, state in pairs(origEffects) do
+            if eff and eff.Parent then pcall(function() eff.Enabled = state end) end
         end
     end
-    return out
 end
 
--- ─── TARGET ───────────────────────────────────────────────────────────────────
-local currentTarget=nil
+-- ─── UTIL ─────────────────────────────────────────────────────────────────────
+local function connect(sig, fn) local c = sig:Connect(fn); connections[#connections+1]=c; return c end
 
-local function getBest()
-    local best,bd=nil,math.huge
-    for _,p in ipairs(enemies()) do
-        local pt=getPart(p,cfg.AimBone); if not pt then continue end
-        local sp,dep,vis=toScreen(pt.Position)
-        if not vis or dep<=0 or not inFOV(sp) then continue end
-        local d=(sp-Vector2.new(sw/2,sh/2)).Magnitude
-        if d<bd then bd=d; best=p end
+local function getRoot(p)
+    local c = p and p.Character; if not c then return nil end
+    return c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso")
+end
+local function getHum(p)   local c=p and p.Character; return c and c:FindFirstChildOfClass("Humanoid") end
+local function getHP(p)
+    local c = p and p.Character; if not c then return 0 end
+    local h = c:FindFirstChildOfClass("Humanoid"); if h then return h.Health end
+    local v = c:GetAttribute("Health") or c:GetAttribute("HP")
+    return typeof(v)=="number" and v or (getRoot(p) and 100 or 0)
+end
+local function alive(p) return getHP(p) > 0 end
+
+local function stdTeammate(a,b)
+    if not a or not b then return false end
+    if a.Team and b.Team then return a.Team==b.Team end
+    if not a.Neutral and not b.Neutral and a.TeamColor and b.TeamColor then return a.TeamColor==b.TeamColor end
+    for _, k in ipairs({"Team","TeamId","TeamID","Side","Faction"}) do
+        local x,y = a:GetAttribute(k), b:GetAttribute(k)
+        if x~=nil and y~=nil then return tostring(x)==tostring(y) end
     end
-    return best
+    return false
+end
+local function hasTeamData(p)
+    if not p then return false end
+    if p.Team~=nil then return true end
+    if not p.Neutral and p.TeamColor~=nil then return true end
+    for _, k in ipairs({"Team","TeamId","TeamID","Side","Faction"}) do
+        if p:GetAttribute(k)~=nil then return true end
+    end
+    return false
+end
+local function teammate(p)
+    if p==LP then return true end
+    if hasTeamData(LP) and hasTeamData(p) then return stdTeammate(LP,p) end
+    if stdTeammate(LP,p) then return true end
+    return roundTeam[p]==true
+end
+local function validTarget(p)
+    if p==LP then return false end
+    if not alive(p) then return false end
+    if CFG.TeamCheck and teammate(p) then return false end
+    return true
 end
 
 -- ─── AIMBOT ───────────────────────────────────────────────────────────────────
-local function doAimbot()
-    if not cfg.Aimbot then return end
-    if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
-    if not currentTarget then return end
-    local pt=getPart(currentTarget,cfg.AimBone); if not pt then return end
-    cam.CFrame=cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position,pt.Position),cfg.AimSmooth)
-end
+local aimParams = RaycastParams.new()
+aimParams.FilterType = Enum.RaycastFilterType.Exclude
+aimParams.IgnoreWater = true
 
--- ─── SILENT AIM ───────────────────────────────────────────────────────────────
-local function initSilentAim()
-    if not hookmetamethod then return end
-    local orig
-    orig=hookmetamethod(game,"__namecall",newcclosure(function(self,...)
-        local m=getnamecallmethod()
-        if cfg.SilentAim and (m=="FireServer" or m=="InvokeServer") and currentTarget then
-            local pt=getPart(currentTarget,cfg.AimBone)
-            if pt then
-                local args={...}
-                for i=1,#args do
-                    if typeof(args[i])=="CFrame" then args[i]=CFrame.new(pt.Position); return orig(self,table.unpack(args))
-                    elseif typeof(args[i])=="Vector3" then args[i]=pt.Position; return orig(self,table.unpack(args)) end
-                end
-            end
-        end
-        return orig(self,...)
-    end))
-end
-
--- ─── TRIGGERBOT ───────────────────────────────────────────────────────────────
-local lastTrig=0
-local function doTrigger()
-    if not cfg.TriggerBot or tick()-lastTrig<cfg.TriggerDelay then return end
-    if not currentTarget then return end
-    local pt=getPart(currentTarget,cfg.AimBone); if not pt then return end
-    local sp,_,vis=toScreen(pt.Position)
-    if vis and (sp-Vector2.new(sw/2,sh/2)).Magnitude<20 then
-        mouse1click(); lastTrig=tick()
+local function getAimPart(p)
+    local c = p and p.Character; if not c then return nil end
+    if CFG.AimHead then
+        return c:FindFirstChild("Head") or c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso")
     end
+    return c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso") or c:FindFirstChild("Head")
 end
 
--- ─── ESP ──────────────────────────────────────────────────────────────────────
-local dc={}
-local SKEL={
-    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
-    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
-    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
-    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
-    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
-}
-local function gd(id,cls,props)
-    if not dc[id] then
-        local o=Drawing.new(cls)
-        for k,v in pairs(props) do o[k]=v end
-        dc[id]=o
-    end
-    return dc[id]
+local function aimVisible(p, part)
+    if not CFG.AimVisibleCheck then return true end
+    Camera = workspace.CurrentCamera; if not Camera or not part then return false end
+    local ign = {}; if LP.Character then ign[1]=LP.Character end
+    aimParams.FilterDescendantsInstances = ign
+    local hit = workspace:Raycast(Camera.CFrame.Position, part.Position - Camera.CFrame.Position, aimParams)
+    if not hit then return true end
+    local char = p.Character
+    return char and hit.Instance and hit.Instance:IsDescendantOf(char)
 end
 
-local function drawESP()
-    for _,o in pairs(dc) do o.Visible=false end
-    if not cfg.ESP then return end
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p==lp or not alive(p) then continue end
-        local c=getChar(p); if not c then continue end
-        local head=c:FindFirstChild("Head")
-        local root=c:FindFirstChild("HumanoidRootPart")
-        local hum=c:FindFirstChildOfClass("Humanoid")
-        if not head or not root or not hum then continue end
-        local topS,dep,tVis=toScreen(head.Position+Vector3.new(0,0.7,0))
-        local botS,_,bVis=toScreen(root.Position-Vector3.new(0,3,0))
-        if not tVis or not bVis or dep<=0 then continue end
-        local col=sameTeam(p) and Color3.fromRGB(60,180,255) or Color3.fromRGB(255,60,60)
-        local h=math.abs(botS.Y-topS.Y); if h<5 then continue end
-        local w=h*0.5; local cx=topS.X
-        if cfg.ESPBox then
-            local b=gd(p.UserId.."bx","Square",{Filled=false,Thickness=1.5})
-            b.Size=Vector2.new(w,h); b.Position=Vector2.new(cx-w/2,topS.Y)
-            b.Color=col; b.Visible=true
-        end
-        if cfg.ESPName then
-            local n=gd(p.UserId.."nm","Text",{Size=13,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Font=2})
-            n.Text=p.DisplayName; n.Color=col
-            n.Position=Vector2.new(cx,topS.Y-16); n.Visible=true
-        end
-        if cfg.ESPHealth then
-            local rat=math.clamp(hum.Health/math.max(hum.MaxHealth,1),0,1)
-            local bx2=cx-w/2-7
-            local bg=gd(p.UserId.."hbg","Square",{Filled=true,Thickness=0,Color=Color3.fromRGB(10,10,10)})
-            bg.Size=Vector2.new(4,h); bg.Position=Vector2.new(bx2,topS.Y); bg.Visible=true
-            local fg=gd(p.UserId.."hfg","Square",{Filled=true,Thickness=0})
-            local fh=h*rat
-            fg.Size=Vector2.new(4,fh); fg.Position=Vector2.new(bx2,topS.Y+h-fh)
-            fg.Color=Color3.fromRGB(math.floor(255*(1-rat)),math.floor(220*rat),30); fg.Visible=true
-        end
-        if cfg.ESPDist then
-            local dd=gd(p.UserId.."dt","Text",{Size=11,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Font=2})
-            dd.Text=string.format("%.0f st",dep); dd.Color=Color3.fromRGB(200,200,200)
-            dd.Position=Vector2.new(cx,botS.Y+4); dd.Visible=true
-        end
-        if cfg.ESPSkeleton then
-            for i,pr in ipairs(SKEL) do
-                local a=c:FindFirstChild(pr[1]); local b=c:FindFirstChild(pr[2])
-                if a and b then
-                    local sA,_,vA=toScreen(a.Position); local sB,_,vB=toScreen(b.Position)
-                    if vA and vB then
-                        local ln=gd(p.UserId.."sk"..i,"Line",{Thickness=1.1,Color=col})
-                        ln.From=sA; ln.To=sB; ln.Color=col; ln.Visible=true
+local function getBestAimTarget()
+    Camera = workspace.CurrentCamera; if not Camera then return nil end
+    local vp = Camera.ViewportSize
+    local center = Vector2.new(vp.X*0.5, vp.Y*0.5)
+    local camPos = Camera.CFrame.Position
+    local best, bestDist = nil, CFG.AimFOV
+    for _, p in ipairs(Players:GetPlayers()) do
+        if validTarget(p) then
+            local part = getAimPart(p)
+            if part and part:IsA("BasePart") then
+                if (part.Position-camPos).Magnitude <= CFG.AimMaxDistance then
+                    local sp, onScreen = Camera:WorldToViewportPoint(part.Position)
+                    if onScreen and sp.Z>0 then
+                        local d = (Vector2.new(sp.X,sp.Y)-center).Magnitude
+                        if d<=bestDist and aimVisible(p,part) then bestDist=d; best=part end
                     end
                 end
             end
         end
     end
+    return best
 end
 
--- ─── FOV CIRCLE ───────────────────────────────────────────────────────────────
-local fovC=Drawing.new("Circle")
-fovC.NumSides=64; fovC.Thickness=1.5
-fovC.Filled=false; fovC.Color=Color3.fromRGB(255,180,0)
+-- ─── GUI ROOT ─────────────────────────────────────────────────────────────────
+local function new(cls, props)
+    local o = Instance.new(cls)
+    for k,v in pairs(props or {}) do if k~="Parent" then o[k]=v end end
+    if props and props.Parent then o.Parent=props.Parent end
+    return o
+end
+local function corner(p,r) return new("UICorner",{CornerRadius=UDim.new(0,r or 8),Parent=p}) end
+local function stroke(p,t) return new("UIStroke",{Color=T.Border,Thickness=1,Transparency=t or 0.25,Parent=p}) end
 
--- ─── UI ───────────────────────────────────────────────────────────────────────
--- destroy old gui if reinjecting
 pcall(function()
-    game:GetService("CoreGui"):FindFirstChild("BananeService"):Destroy()
+    local old = CoreGui:FindFirstChild("BananeService_Main")
+    if old then old:Destroy() end
 end)
 
-local cg = (cloneref or function(x)return x end)(game:GetService("CoreGui"))
-local gui=Instance.new("ScreenGui",cg)
-gui.Name="BananeService"; gui.ResetOnSpawn=false
-gui.IgnoreGuiInset=true; gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+local gui = new("ScreenGui",{
+    Name="BananeService_Main", ResetOnSpawn=false, IgnoreGuiInset=true, DisplayOrder=999999
+})
+local mounted=false
+if gethui then local ok,p=pcall(gethui); if ok and p then gui.Parent=p; mounted=true end end
+if not mounted then local ok=pcall(function() gui.Parent=CoreGui end); if not ok then gui.Parent=LP:WaitForChild("PlayerGui") end end
 
-local GOLD   = Color3.fromRGB(255,175,0)
-local DARK   = Color3.fromRGB(14,10,4)
-local PANEL  = Color3.fromRGB(22,16,4)
-local PANELH = Color3.fromRGB(30,22,4)
-local BORDER = Color3.fromRGB(70,50,5)
-local TEXT   = Color3.fromRGB(210,195,165)
+local WIN_W, WIN_H = 780, 500
 
--- window  (fixed size, no AutomaticSize on root)
-local WIN_W,WIN_H = 480,420
-local win=Instance.new("Frame",gui)
-win.Size=UDim2.new(0,WIN_W,0,WIN_H)
-win.Position=UDim2.new(0.5,-WIN_W/2,0.5,-WIN_H/2)
-win.BackgroundColor3=DARK; win.BorderSizePixel=0
-win.ClipsDescendants=false
-Instance.new("UICorner",win).CornerRadius=UDim.new(0,8)
-local ws=Instance.new("UIStroke",win); ws.Color=Color3.fromRGB(200,140,0); ws.Thickness=2
+local window = new("Frame",{
+    Name="Window", Size=UDim2.fromOffset(WIN_W,WIN_H),
+    Position=UDim2.new(0.5,-WIN_W/2,0.5,-WIN_H/2),
+    BackgroundColor3=T.Panel, BorderSizePixel=0, ClipsDescendants=true, Parent=gui
+})
+corner(window,14)
+local ws2 = new("UIStroke",{Color=T.Accent, Thickness=2, Transparency=0.1, Parent=window})
 
--- titlebar
-local tbar=Instance.new("Frame",win)
-tbar.Size=UDim2.new(1,0,0,38); tbar.Position=UDim2.new(0,0,0,0)
-tbar.BackgroundColor3=PANELH; tbar.BorderSizePixel=0
-Instance.new("UICorner",tbar).CornerRadius=UDim.new(0,8)
+-- sidebar
+local sidebar = new("Frame",{
+    Size=UDim2.new(0,190,1,0), BackgroundColor3=T.Bg, BorderSizePixel=0, Parent=window
+})
 
-local ttl=Instance.new("TextLabel",tbar)
-ttl.Size=UDim2.new(1,-40,1,0); ttl.Position=UDim2.new(0,10,0,0)
-ttl.BackgroundTransparency=1; ttl.Text="👑  BANANE SERVICE"
-ttl.TextColor3=GOLD; ttl.TextSize=15; ttl.Font=Enum.Font.GothamBold
-ttl.TextXAlignment=Enum.TextXAlignment.Left
+-- brand
+local brandBar = new("Frame",{
+    Position=UDim2.fromOffset(14,18), Size=UDim2.fromOffset(4,36),
+    BackgroundColor3=T.Accent, BorderSizePixel=0, Parent=sidebar
+})
+corner(brandBar,4)
 
-local xbtn=Instance.new("TextButton",tbar)
-xbtn.Size=UDim2.new(0,24,0,24); xbtn.Position=UDim2.new(1,-30,0.5,-12)
-xbtn.BackgroundColor3=Color3.fromRGB(150,25,25); xbtn.Text="✕"
-xbtn.TextColor3=Color3.new(1,1,1); xbtn.TextSize=12
-xbtn.Font=Enum.Font.GothamBold; xbtn.BorderSizePixel=0
-Instance.new("UICorner",xbtn).CornerRadius=UDim.new(0,5)
-local menuOpen=true
-xbtn.MouseButton1Click:Connect(function() menuOpen=not menuOpen; win.Visible=menuOpen end)
+new("TextLabel",{
+    Position=UDim2.fromOffset(26,16), Size=UDim2.new(1,-40,0,22),
+    BackgroundTransparency=1, Text="👑  BANANE SERVICE",
+    TextColor3=T.Accent, Font=Enum.Font.GothamBlack, TextSize=16,
+    TextXAlignment=Enum.TextXAlignment.Left, Parent=sidebar
+})
+new("TextLabel",{
+    Position=UDim2.fromOffset(26,38), Size=UDim2.new(1,-40,0,14),
+    BackgroundTransparency=1, Text="V1  •  BANANE EDITION",
+    TextColor3=T.Dim, Font=Enum.Font.GothamMedium, TextSize=9,
+    TextXAlignment=Enum.TextXAlignment.Left, Parent=sidebar
+})
 
--- drag
+new("TextLabel",{
+    Position=UDim2.fromOffset(16,78), Size=UDim2.new(1,-32,0,16),
+    BackgroundTransparency=1, Text="MODULES",
+    TextColor3=T.Dim, Font=Enum.Font.GothamBold, TextSize=9,
+    TextXAlignment=Enum.TextXAlignment.Left, Parent=sidebar
+})
+
+local navHost = new("Frame",{
+    Position=UDim2.fromOffset(10,98), Size=UDim2.new(1,-20,0,260),
+    BackgroundTransparency=1, Parent=sidebar
+})
+new("UIListLayout",{Padding=UDim.new(0,5), SortOrder=Enum.SortOrder.LayoutOrder, Parent=navHost})
+
+-- sidebar footer
+local sfooter = new("Frame",{
+    Position=UDim2.new(0,10,1,-70), Size=UDim2.new(1,-20,0,56),
+    BackgroundColor3=T.Card, BorderSizePixel=0, Parent=sidebar
+})
+corner(sfooter,10)
+new("TextLabel",{
+    Position=UDim2.fromOffset(10,8), Size=UDim2.new(1,-20,0,16),
+    BackgroundTransparency=1, Text="BANANE SERVICE",
+    TextColor3=T.Accent, Font=Enum.Font.GothamBold, TextSize=9,
+    TextXAlignment=Enum.TextXAlignment.Left, Parent=sfooter
+})
+new("TextLabel",{
+    Position=UDim2.fromOffset(10,24), Size=UDim2.new(1,-20,0,20),
+    BackgroundTransparency=1, Text="discord.gg/Gc2zKtGadB",
+    TextColor3=T.Dim, Font=Enum.Font.Gotham, TextSize=8,
+    TextWrapped=true, TextXAlignment=Enum.TextXAlignment.Left, Parent=sfooter
+})
+
+-- main area
+local main = new("Frame",{
+    Position=UDim2.fromOffset(190,0), Size=UDim2.new(1,-190,1,0),
+    BackgroundTransparency=1, Parent=window
+})
+
+local header = new("Frame",{Size=UDim2.new(1,0,0,72), BackgroundTransparency=1, Parent=main})
+local pageTitle = new("TextLabel",{
+    Position=UDim2.fromOffset(22,14), Size=UDim2.new(1,-100,0,26),
+    BackgroundTransparency=1, Text="Combat",
+    TextColor3=T.Text, Font=Enum.Font.GothamBold, TextSize=20,
+    TextXAlignment=Enum.TextXAlignment.Left, Parent=header
+})
+local pageSub = new("TextLabel",{
+    Position=UDim2.fromOffset(22,41), Size=UDim2.new(1,-100,0,16),
+    BackgroundTransparency=1, Text="Aim et pénétration",
+    TextColor3=T.Dim, Font=Enum.Font.Gotham, TextSize=10,
+    TextXAlignment=Enum.TextXAlignment.Left, Parent=header
+})
+
+local closeBtn = new("TextButton",{
+    Position=UDim2.new(1,-48,0,18), Size=UDim2.fromOffset(30,30),
+    BackgroundColor3=T.Card, BorderSizePixel=0, Text="×",
+    TextColor3=T.Dim, Font=Enum.Font.GothamBold, TextSize=18,
+    AutoButtonColor=false, Parent=header
+})
+corner(closeBtn,8)
+
+local body = new("Frame",{
+    Position=UDim2.fromOffset(18,72), Size=UDim2.new(1,-36,1,-88),
+    BackgroundTransparency=1, Parent=main
+})
+
+-- ─── PAGE SYSTEM ─────────────────────────────────────────────────────────────
+local pages, navButtons = {}, {}
+local pageMeta = {
+    Combat   = "Aim et pénétration",
+    Visuals  = "Wallhack et infos ennemis",
+    Hitbox   = "Agrandissement hitbox tête",
+    Viewmodel= "Position mains et arme",
+    Settings = "Raccourcis et performances",
+}
+
+local function makePage(name)
+    local p = new("ScrollingFrame",{
+        Name=name, Size=UDim2.fromScale(1,1), BackgroundTransparency=1,
+        BorderSizePixel=0, ScrollBarThickness=2, ScrollBarImageColor3=T.Accent,
+        AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=UDim2.new(),
+        Visible=false, Parent=body
+    })
+    new("UIListLayout",{Padding=UDim.new(0,8), SortOrder=Enum.SortOrder.LayoutOrder, Parent=p})
+    pages[name]=p; return p
+end
+
+local function switchPage(name)
+    for n,p in pairs(pages) do p.Visible = n==name end
+    for n,d in pairs(navButtons) do
+        local a = n==name
+        d.Button.BackgroundColor3 = a and T.Card2 or T.Bg
+        d.Button.TextColor3 = a and T.Accent or T.Dim
+        d.Dot.BackgroundTransparency = a and 0 or 1
+    end
+    pageTitle.Text = name
+    pageSub.Text   = pageMeta[name] or ""
+end
+
+local function navBtn(name, icon)
+    local b = new("TextButton",{
+        Size=UDim2.new(1,0,0,38), BackgroundColor3=T.Bg, BorderSizePixel=0,
+        Text="   "..icon.."   "..name, TextColor3=T.Dim,
+        Font=Enum.Font.GothamMedium, TextSize=11,
+        TextXAlignment=Enum.TextXAlignment.Left,
+        AutoButtonColor=false, Parent=navHost
+    })
+    corner(b,8)
+    local dot = new("Frame",{
+        AnchorPoint=Vector2.new(1,0.5), Position=UDim2.new(1,-8,0.5,0),
+        Size=UDim2.fromOffset(3,16), BackgroundColor3=T.Accent,
+        BackgroundTransparency=1, BorderSizePixel=0, Parent=b
+    })
+    corner(dot,4)
+    navButtons[name]={Button=b,Dot=dot}
+    connect(b.MouseButton1Click, function() switchPage(name) end)
+end
+
+local combatPage   = makePage("Combat")
+local visualsPage  = makePage("Visuals")
+local hitboxPage   = makePage("Hitbox")
+local viewmodelPage= makePage("Viewmodel")
+local settingsPage = makePage("Settings")
+
+navBtn("Combat",   "◎")
+navBtn("Visuals",  "◈")
+navBtn("Hitbox",   "◇")
+navBtn("Viewmodel","▱")
+navBtn("Settings", "⚙")
+
+-- ─── WIDGET HELPERS ───────────────────────────────────────────────────────────
+local function section(parent, title, sub)
+    local card = new("Frame",{
+        Size=UDim2.new(1,-4,0,50), BackgroundColor3=T.Card2,
+        BorderSizePixel=0, Parent=parent
+    })
+    corner(card,10)
+    new("Frame",{
+        Position=UDim2.fromOffset(0,8), Size=UDim2.fromOffset(3,34),
+        BackgroundColor3=T.Accent, BorderSizePixel=0, Parent=card
+    })
+    new("TextLabel",{
+        Position=UDim2.fromOffset(12,6), Size=UDim2.new(1,-24,0,18),
+        BackgroundTransparency=1, Text=title,
+        TextColor3=T.Accent, Font=Enum.Font.GothamBold, TextSize=11,
+        TextXAlignment=Enum.TextXAlignment.Left, Parent=card
+    })
+    new("TextLabel",{
+        Position=UDim2.fromOffset(12,26), Size=UDim2.new(1,-24,0,14),
+        BackgroundTransparency=1, Text=sub or "",
+        TextColor3=T.Dim, Font=Enum.Font.Gotham, TextSize=9,
+        TextXAlignment=Enum.TextXAlignment.Left, Parent=card
+    })
+end
+
+local function toggle(parent, name, key, cb)
+    local h = new("Frame",{
+        Size=UDim2.new(1,-4,0,42), BackgroundColor3=T.Card,
+        BorderSizePixel=0, Parent=parent
+    })
+    corner(h,10)
+    new("TextLabel",{
+        Position=UDim2.fromOffset(12,0), Size=UDim2.new(1,-72,1,0),
+        BackgroundTransparency=1, Text=name, TextColor3=T.Text,
+        Font=Enum.Font.GothamMedium, TextSize=10,
+        TextXAlignment=Enum.TextXAlignment.Left, Parent=h
+    })
+    local sw = new("Frame",{
+        Position=UDim2.new(1,-50,0.5,-9), Size=UDim2.fromOffset(36,18),
+        BorderSizePixel=0, Parent=h
+    })
+    corner(sw,10)
+    local knob = new("Frame",{Size=UDim2.fromOffset(12,12), BorderSizePixel=0, BackgroundColor3=T.White, Parent=sw})
+    corner(knob,8)
+    local function paint()
+        local on = CFG[key]==true
+        sw.BackgroundColor3 = on and T.Accent or Color3.fromRGB(45,35,8)
+        knob.Position = on and UDim2.new(1,-15,0.5,-6) or UDim2.new(0,3,0.5,-6)
+    end
+    local btn = new("TextButton",{Size=UDim2.fromScale(1,1), BackgroundTransparency=1, Text="", Parent=h})
+    connect(btn.MouseButton1Click, function()
+        CFG[key]=not CFG[key]; paint(); if cb then cb(CFG[key]) end
+    end)
+    paint(); return paint
+end
+
+local function slider(parent, name, key, mn, mx, step, cb)
+    local h = new("Frame",{
+        Size=UDim2.new(1,-4,0,58), BackgroundColor3=T.Card,
+        BorderSizePixel=0, Parent=parent
+    })
+    corner(h,10)
+    local lbl = new("TextLabel",{
+        Position=UDim2.fromOffset(12,4), Size=UDim2.new(1,-24,0,20),
+        BackgroundTransparency=1, TextColor3=T.Text,
+        Font=Enum.Font.Gotham, TextSize=10,
+        TextXAlignment=Enum.TextXAlignment.Left, Parent=h
+    })
+    local bar = new("Frame",{
+        Position=UDim2.new(0,12,1,-15), Size=UDim2.new(1,-24,0,4),
+        BackgroundColor3=Color3.fromRGB(40,30,5), BorderSizePixel=0, Parent=h
+    })
+    corner(bar,4)
+    local fill = new("Frame",{BackgroundColor3=T.Accent, BorderSizePixel=0, Parent=bar})
+    corner(fill,4)
+    local dragging = false
+    local function set(v)
+        v = math.clamp(v, mn, mx)
+        v = math.floor(v/step+0.5)*step
+        v = tonumber(string.format("%.3f",v))
+        CFG[key]=v
+        fill.Size=UDim2.fromScale((v-mn)/(mx-mn),1)
+        lbl.Text = step<1 and (name..": "..string.format("%.2f",v)) or (name..": "..math.floor(v))
+        if cb then cb(v) end
+    end
+    local function upd(x)
+        if bar.AbsoluteSize.X<=0 then return end
+        local r = math.clamp((x-bar.AbsolutePosition.X)/bar.AbsoluteSize.X,0,1)
+        set(mn+(mx-mn)*r)
+    end
+    connect(bar.InputBegan, function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true; upd(i.Position.X) end end)
+    connect(UIS.InputChanged, function(i) if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then upd(i.Position.X) end end)
+    connect(UIS.InputEnded, function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
+    set(CFG[key])
+end
+
+local bindingKey, bindingButton = nil, nil
+local function keybind(parent, label, key)
+    local h = new("Frame",{Size=UDim2.new(1,-4,0,42), BackgroundColor3=T.Card, BorderSizePixel=0, Parent=parent})
+    corner(h,10)
+    new("TextLabel",{
+        Position=UDim2.fromOffset(12,0), Size=UDim2.new(1,-120,1,0),
+        BackgroundTransparency=1, Text=label, TextColor3=T.Text,
+        Font=Enum.Font.GothamMedium, TextSize=10,
+        TextXAlignment=Enum.TextXAlignment.Left, Parent=h
+    })
+    local b = new("TextButton",{
+        Position=UDim2.new(1,-108,0.5,-13), Size=UDim2.fromOffset(94,26),
+        BackgroundColor3=T.Card2, BorderSizePixel=0,
+        Text=CFG[key].Name, TextColor3=T.Accent2,
+        Font=Enum.Font.GothamBold, TextSize=9, AutoButtonColor=false, Parent=h
+    })
+    corner(b,7)
+    connect(b.MouseButton1Click, function() bindingKey=key; bindingButton=b; b.Text="PRESS KEY" end)
+end
+
+-- ─── PAGE CONTENT ─────────────────────────────────────────────────────────────
+section(combatPage, "AIMBOT", "Aim assist caméra avec filtre équipe et visibilité.")
+toggle(combatPage, "Aimbot Activé",          "Aimbot")
+toggle(combatPage, "Tenir RMB pour Viser",   "AimHoldRMB")
+toggle(combatPage, "Viser la Tête",          "AimHead")
+toggle(combatPage, "Vérif. Visibilité",      "AimVisibleCheck")
+slider(combatPage, "FOV Aimbot",             "AimFOV", 20, 500, 5)
+slider(combatPage, "Smooth Aimbot",          "AimSmooth", 1, 35, 1)
+slider(combatPage, "Distance Max",           "AimMaxDistance", 100, 5000, 100)
+
+section(combatPage, "WALLBANG", "Pénétration de mur côté client.")
+toggle(combatPage, "Wallbang Activé",        "Wallbang")
+slider(combatPage, "Profondeur de Pénétration","PenetrationDepth", 1, 8, 1)
+
+section(visualsPage, "WALLHACK / ESP", "Highlight ennemi à travers les murs.")
+toggle(visualsPage, "ESP Activé",            "ESP")
+toggle(visualsPage, "Highlight Mur",         "Highlight")
+toggle(visualsPage, "Fill Ennemi",           "HighlightFill")
+toggle(visualsPage, "Box Tête",              "BoxESP")
+toggle(visualsPage, "Nom Joueur",            "Name")
+toggle(visualsPage, "Santé",                 "Health")
+toggle(visualsPage, "Distance",              "Distance")
+slider(visualsPage, "Distance Max ESP",      "MaxDistance", 100, 5000, 100)
+slider(visualsPage, "Fréquence ESP",         "ESPUpdateRate", 0.08, 0.4, 0.01)
+toggle(visualsPage, "Team Check",            "TeamCheck")
+slider(visualsPage, "Rayon Spawn Équipe",    "TeamRadius", 5, 60, 1)
+
+section(hitboxPage, "HITBOX TÊTE", "Agrandissement local de la hitbox tête.")
+toggle(hitboxPage, "Expansion Activée",      "HeadExpand")
+slider(hitboxPage, "Taille Tête",            "HeadSize", 1, 30, 0.5)
+slider(hitboxPage, "Transparence Tête",      "HeadTransparency", 0, 1, 0.05)
+
+section(viewmodelPage, "MAINS / VIEWMODEL", "Positionne les mains et l'arme en vue FP.")
+toggle(viewmodelPage, "Viewmodel Custom",    "ViewmodelEnabled")
+slider(viewmodelPage, "FOV Viewmodel",       "ViewmodelFOV", 45, 120, 1)
+slider(viewmodelPage, "Côté (X)",            "ViewmodelX", -3, 3, 0.05)
+slider(viewmodelPage, "Haut/Bas (Y)",        "ViewmodelY", -3, 3, 0.05)
+slider(viewmodelPage, "Avant/Arrière (Z)",   "ViewmodelZ", -4, 4, 0.05)
+
+section(settingsPage, "RACCOURCIS", "Clique sur un bind puis appuie sur la nouvelle touche.")
+keybind(settingsPage, "Menu",                "MenuKey")
+keybind(settingsPage, "Aimbot",              "AimbotKey")
+keybind(settingsPage, "Wallhack / ESP",      "ESPKey")
+keybind(settingsPage, "Wallbang",            "WallbangKey")
+keybind(settingsPage, "Potato Mode",         "PotatoKey")
+keybind(settingsPage, "Décharger",           "UnloadKey")
+
+section(settingsPage, "PERFORMANCES", "GUI statique, pas d'effets animés.")
+toggle(settingsPage, "Potato Mode", "PotatoMode", function(v)
+    applyPotatoMode(v); task.defer(refreshAllESP)
+end)
+new("TextLabel",{
+    Size=UDim2.new(1,-4,0,56), BackgroundColor3=T.Card, BorderSizePixel=0,
+    Text="Potato Mode désactive ombres et post-processing.\nL'interface n'a aucun loop de rendu permanent.",
+    TextWrapped=true, TextColor3=T.Dim, Font=Enum.Font.Gotham, TextSize=9, Parent=settingsPage
+})
+
+switchPage("Combat")
+
+-- ─── DRAG ─────────────────────────────────────────────────────────────────────
 do
-    local drag,ds,dp=false,nil,nil
-    tbar.InputBegan:Connect(function(i)
-        if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true;ds=i.Position;dp=win.Position end
+    local drag,ds,sp=false
+    connect(header.InputBegan, function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true;ds=i.Position;sp=window.Position end
     end)
-    tbar.InputEnded:Connect(function(i)
-        if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
+    connect(UIS.InputChanged, function(i)
         if drag and i.UserInputType==Enum.UserInputType.MouseMovement then
             local d=i.Position-ds
-            win.Position=UDim2.new(dp.X.Scale,dp.X.Offset+d.X,dp.Y.Scale,dp.Y.Offset+d.Y)
+            window.Position=UDim2.new(sp.X.Scale,sp.X.Offset+d.X,sp.Y.Scale,sp.Y.Offset+d.Y)
         end
     end)
-end
-
--- content area  (fixed, no scrolling needed at this size)
-local CONTENT_Y = 42  -- below titlebar
-local COL_W     = 220
-local COL_PAD   = 8
-
--- ── panel builder (absolute position, fixed height)
-local function mkPanel(parent, title, icon, x, y, w, h)
-    local f=Instance.new("Frame",parent)
-    f.Size=UDim2.new(0,w,0,h); f.Position=UDim2.new(0,x,0,y)
-    f.BackgroundColor3=PANEL; f.BorderSizePixel=0
-    Instance.new("UICorner",f).CornerRadius=UDim.new(0,6)
-    local fs=Instance.new("UIStroke",f); fs.Color=BORDER; fs.Thickness=1
-    local hdr=Instance.new("Frame",f)
-    hdr.Size=UDim2.new(1,0,0,24); hdr.BackgroundColor3=PANELH; hdr.BorderSizePixel=0
-    Instance.new("UICorner",hdr).CornerRadius=UDim.new(0,6)
-    local ht=Instance.new("TextLabel",hdr)
-    ht.Size=UDim2.new(1,-8,1,0); ht.Position=UDim2.new(0,8,0,0)
-    ht.BackgroundTransparency=1; ht.Text=icon.."  "..title
-    ht.TextColor3=GOLD; ht.TextSize=11; ht.Font=Enum.Font.GothamBold
-    ht.TextXAlignment=Enum.TextXAlignment.Left
-    -- body list
-    local body=Instance.new("Frame",f)
-    body.Size=UDim2.new(1,-10,1,-28); body.Position=UDim2.new(0,5,0,27)
-    body.BackgroundTransparency=1
-    local bl=Instance.new("UIListLayout",body)
-    bl.Padding=UDim.new(0,4); bl.SortOrder=Enum.SortOrder.LayoutOrder
-    bl.VerticalAlignment=Enum.VerticalAlignment.Top
-    return body
-end
-
--- ── toggle row
-local function mkToggle(parent, label, key, order)
-    local row=Instance.new("Frame",parent)
-    row.Size=UDim2.new(1,0,0,22); row.BackgroundTransparency=1; row.LayoutOrder=order
-
-    local lbl=Instance.new("TextLabel",row)
-    lbl.Size=UDim2.new(1,-40,1,0); lbl.BackgroundTransparency=1
-    lbl.Text=label; lbl.TextColor3=TEXT; lbl.TextSize=11; lbl.Font=Enum.Font.Gotham
-    lbl.TextXAlignment=Enum.TextXAlignment.Left
-
-    local bg=Instance.new("Frame",row)
-    bg.Size=UDim2.new(0,34,0,17); bg.Position=UDim2.new(1,-36,0.5,-8.5)
-    bg.BackgroundColor3=cfg[key] and GOLD or Color3.fromRGB(45,45,45)
-    bg.BorderSizePixel=0; Instance.new("UICorner",bg).CornerRadius=UDim.new(1,0)
-
-    local knob=Instance.new("Frame",bg)
-    knob.Size=UDim2.new(0,13,0,13)
-    knob.Position=cfg[key] and UDim2.new(1,-15,0.5,-6.5) or UDim2.new(0,2,0.5,-6.5)
-    knob.BackgroundColor3=Color3.new(1,1,1); knob.BorderSizePixel=0
-    Instance.new("UICorner",knob).CornerRadius=UDim.new(1,0)
-
-    local btn=Instance.new("TextButton",row)
-    btn.Size=UDim2.new(1,0,1,0); btn.BackgroundTransparency=1; btn.Text=""
-    btn.ZIndex=2
-    btn.MouseButton1Click:Connect(function()
-        cfg[key]=not cfg[key]
-        local on=cfg[key]
-        bg.BackgroundColor3=on and GOLD or Color3.fromRGB(45,45,45)
-        TweenService:Create(knob,TweenInfo.new(0.1),{
-            Position=on and UDim2.new(1,-15,0.5,-6.5) or UDim2.new(0,2,0.5,-6.5)
-        }):Play()
+    connect(UIS.InputEnded, function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end
     end)
 end
 
--- ── slider row
-local function mkSlider(parent, label, key, mn, mx, fmt, order)
-    local fmt2=fmt or "%.0f"
-    local row=Instance.new("Frame",parent)
-    row.Size=UDim2.new(1,0,0,34); row.BackgroundTransparency=1; row.LayoutOrder=order
-
-    local lbl=Instance.new("TextLabel",row)
-    lbl.Size=UDim2.new(1,-44,0,14); lbl.BackgroundTransparency=1
-    lbl.Text=label; lbl.TextColor3=TEXT; lbl.TextSize=10; lbl.Font=Enum.Font.Gotham
-    lbl.TextXAlignment=Enum.TextXAlignment.Left
-
-    local vl=Instance.new("TextLabel",row)
-    vl.Size=UDim2.new(0,42,0,14); vl.Position=UDim2.new(1,-44,0,0)
-    vl.BackgroundTransparency=1; vl.Text=string.format(fmt2,cfg[key])
-    vl.TextColor3=GOLD; vl.TextSize=10; vl.Font=Enum.Font.GothamBold
-    vl.TextXAlignment=Enum.TextXAlignment.Right
-
-    local track=Instance.new("Frame",row)
-    track.Size=UDim2.new(1,0,0,5); track.Position=UDim2.new(0,0,0,17)
-    track.BackgroundColor3=Color3.fromRGB(38,28,8); track.BorderSizePixel=0
-    Instance.new("UICorner",track).CornerRadius=UDim.new(1,0)
-
-    local ratio=(cfg[key]-mn)/(mx-mn)
-    local fill=Instance.new("Frame",track)
-    fill.Size=UDim2.new(ratio,0,1,0); fill.BackgroundColor3=GOLD
-    fill.BorderSizePixel=0; Instance.new("UICorner",fill).CornerRadius=UDim.new(1,0)
-
-    local sliding=false
-    local hit=Instance.new("TextButton",row)
-    hit.Size=UDim2.new(1,0,0,22); hit.Position=UDim2.new(0,0,0,12)
-    hit.BackgroundTransparency=1; hit.Text=""; hit.ZIndex=2
-
-    local function upd(ix)
-        local r=math.clamp((ix-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
-        local dec=tonumber((fmt2:match("%.(%d)"))) or 0
-        local mul=10^dec
-        local v=math.floor((mn+r*(mx-mn))*mul+0.5)/mul
-        cfg[key]=v; fill.Size=UDim2.new(r,0,1,0); vl.Text=string.format(fmt2,v)
+-- ─── HEAD HITBOX ──────────────────────────────────────────────────────────────
+local function restoreOneHead(head)
+    local o=originalHeads[head]; if not o then return end
+    originalHeads[head]=nil
+    if not head.Parent then return end
+    pcall(function() head.Size=o.Size; head.Transparency=o.Transparency; head.CanCollide=o.CanCollide; head.Massless=o.Massless end)
+end
+local function restoreHeads() for h in pairs(originalHeads) do restoreOneHead(h) end end
+local function updateHeads()
+    local wanted = Vector3.new(CFG.HeadSize,CFG.HeadSize,CFG.HeadSize); local valid={}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if validTarget(p) then
+            local c=p.Character; local head=c and c:FindFirstChild("Head")
+            if head and head:IsA("BasePart") then
+                valid[head]=true
+                if not originalHeads[head] then
+                    originalHeads[head]={Size=head.Size,Transparency=head.Transparency,CanCollide=head.CanCollide,Massless=head.Massless}
+                end
+                pcall(function() head.Size=wanted; head.Transparency=CFG.HeadTransparency; head.CanCollide=false; head.Massless=true end)
+            end
+        end
     end
-
-    hit.InputBegan:Connect(function(i)
-        if i.UserInputType==Enum.UserInputType.MouseButton1 then sliding=true; upd(i.Position.X) end
-    end)
-    hit.InputEnded:Connect(function(i)
-        if i.UserInputType==Enum.UserInputType.MouseButton1 then sliding=false end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if sliding and i.UserInputType==Enum.UserInputType.MouseMovement then upd(i.Position.X) end
-    end)
+    local restore={}; for h in pairs(originalHeads) do if not valid[h] then restore[#restore+1]=h end end
+    for _,h in ipairs(restore) do restoreOneHead(h) end
 end
 
--- ─── LAYOUT  (absolute, no AutomaticSize chains) ──────────────────────────────
---
---  Left col  x=8                Right col  x=8+220+8=236
---
---  [AIM ASSIST   220x185]       [TRIGGER BOT  220x90 ]
---  [ESP          220x175]       [MISC         220x90 ]
+-- ─── ESP ──────────────────────────────────────────────────────────────────────
+local function hideESP(d) if not d then return end
+    if d.Highlight then d.Highlight.Enabled=false end
+    if d.HeadBox   then d.HeadBox.Visible=false end
+    if d.Gui       then d.Gui.Enabled=false end
+end
+local function removeESP(p)
+    local d=ESP[p]; if not d then return end
+    pcall(function() if d.Highlight then d.Highlight:Destroy() end end)
+    pcall(function() if d.HeadBox   then d.HeadBox:Destroy() end end)
+    pcall(function() if d.Gui       then d.Gui:Destroy() end end)
+    ESP[p]=nil
+end
 
-local L=COL_PAD
-local R=COL_PAD+COL_W+COL_PAD  -- 236
-local T=CONTENT_Y+4
+local function createESP(p)
+    removeESP(p); if p==LP then return end
+    local char=p.Character; if not char then return end
+    local head=char:FindFirstChild("Head"); if not head then return end
 
--- AIM panel  (6 rows: 4 toggles + 2 sliders = 4*22 + 2*34 + paddings)
-local aimB=mkPanel(win,"AIM ASSIST","⊕",L,T,COL_W,190)
-mkToggle(aimB,"Aimbot",      "Aimbot",1)
-mkToggle(aimB,"Silent Aim",  "SilentAim",2)
-mkToggle(aimB,"Team Check",  "TeamCheck",3)
-mkToggle(aimB,"Show FOV",    "ShowFOV",4)
-mkSlider(aimB,"FOV Radius",  "FOV",50,400,"%.0f",5)
-mkSlider(aimB,"Smoothing",   "AimSmooth",0.01,0.99,"%.2f",6)
+    local hl = new("Highlight",{
+        Adornee=char, DepthMode=Enum.HighlightDepthMode.AlwaysOnTop,
+        FillColor=T.Enemy, OutlineColor=T.Enemy,
+        FillTransparency=0.75, OutlineTransparency=0,
+        Enabled=false, Parent=char
+    })
+    local box = new("BoxHandleAdornment",{
+        Adornee=head, AlwaysOnTop=true, ZIndex=10, Size=head.Size,
+        Color3=T.Accent, Transparency=0.5, Visible=false, Parent=head
+    })
+    local bill = new("BillboardGui",{
+        Adornee=head, Size=UDim2.fromOffset(260,40),
+        StudsOffset=Vector3.new(0,2.7,0), AlwaysOnTop=true,
+        Enabled=false, Parent=head
+    })
+    local txt = new("TextLabel",{
+        Size=UDim2.fromScale(1,1), BackgroundTransparency=1,
+        TextColor3=T.Accent, TextStrokeTransparency=0,
+        Font=Enum.Font.GothamBold, TextSize=13, Parent=bill
+    })
+    ESP[p]={Head=head,Highlight=hl,HeadBox=box,Gui=bill,Text=txt}
+end
 
--- ESP panel
-local espB=mkPanel(win,"ESP","👁",L,T+198,COL_W,168)
-mkToggle(espB,"Enable",   "ESP",1)
-mkToggle(espB,"Boxes",    "ESPBox",2)
-mkToggle(espB,"Skeleton", "ESPSkeleton",3)
-mkToggle(espB,"Names",    "ESPName",4)
-mkToggle(espB,"Health",   "ESPHealth",5)
-mkToggle(espB,"Distance", "ESPDist",6)
+refreshAllESP = function()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p~=LP and p.Character then createESP(p) end
+    end
+end
 
--- TRIGGER BOT panel
-local trigB=mkPanel(win,"TRIGGER BOT","⚡",R,T,COL_W,92)
-mkToggle(trigB,"Enable",       "TriggerBot",1)
-mkSlider(trigB,"Delay (s)",    "TriggerDelay",0.01,0.5,"%.2f",2)
+local function hookPlayer(p)
+    if p==LP then return end
+    connect(p.CharacterAdded, function(c)
+        task.delay(0.15, function() if running and p.Character==c then createESP(p) end end)
+        task.delay(0.75, function() if running and p.Character==c and not ESP[p] then createESP(p) end end)
+    end)
+    connect(p.CharacterRemoving, function() removeESP(p); roundTeam[p]=nil end)
+    if p.Character then createESP(p) end
+end
 
--- MISC panel
-local miscB=mkPanel(win,"MISC","⚙",R,T+100,COL_W,92)
-mkToggle(miscB,"Aimbot on RMB","Aimbot",1)
-mkToggle(miscB,"Silent Aim",   "SilentAim",2)
-mkToggle(miscB,"Show FOV",     "ShowFOV",3)
+for _,p in ipairs(Players:GetPlayers()) do hookPlayer(p) end
+connect(Players.PlayerAdded, hookPlayer)
+connect(Players.PlayerRemoving, function(p) removeESP(p); roundTeam[p]=nil end)
 
--- INSERT toggle
-UserInputService.InputBegan:Connect(function(i,gpe)
-    if gpe then return end
-    if i.KeyCode==Enum.KeyCode.Insert then menuOpen=not menuOpen; win.Visible=menuOpen end
+-- ─── ROUND TEAM ───────────────────────────────────────────────────────────────
+local function clearRoundTeam() table.clear(roundTeam) end
+local function rebuildRoundTeam()
+    clearRoundTeam()
+    local myRoot=getRoot(LP); if not myRoot or not alive(LP) then return end
+    local count=0
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p~=LP and alive(p) then
+            local r=getRoot(p)
+            if r and (r.Position-myRoot.Position).Magnitude<=CFG.TeamRadius then
+                roundTeam[p]=true; count+=1
+            end
+        end
+    end
+    roundNumber+=1
+end
+
+local roundAcc=0
+connect(RunService.Heartbeat, function(dt)
+    roundAcc+=dt; if roundAcc<0.5 then return end; roundAcc=0
+    local count=0; for _,p in ipairs(Players:GetPlayers()) do if alive(p) then count+=1 end end
+    local meAlive=alive(LP)
+    if roundActive then
+        if not meAlive or count<=1 then roundActive=false; roundEndedAt=os.clock(); clearRoundTeam() end
+    else
+        if meAlive and count>=2 and os.clock()-roundEndedAt>=1 then
+            roundActive=true
+            task.delay(0.8, function() if running and roundActive and alive(LP) then rebuildRoundTeam() end end)
+        end
+    end
 end)
 
--- ─── MAIN LOOP ────────────────────────────────────────────────────────────────
-initSilentAim()
+-- ─── WALLBANG ─────────────────────────────────────────────────────────────────
+local wallRestore={} local wallBusy=false
+local wallParams=RaycastParams.new()
+wallParams.FilterType=Enum.RaycastFilterType.Exclude; wallParams.IgnoreWater=true
+local function characterPart(part)
+    if not part then return false end
+    local model=part:FindFirstAncestorOfClass("Model"); if not model then return false end
+    if Players:GetPlayerFromCharacter(model) then return true end
+    return model:FindFirstChildOfClass("Humanoid")~=nil
+end
+local function rememberWall(part)
+    if wallRestore[part] then return end
+    wallRestore[part]={CanQuery=part.CanQuery,LocalTransparencyModifier=part.LocalTransparencyModifier}
+end
+local function restoreWalls()
+    for part,old in pairs(wallRestore) do
+        wallRestore[part]=nil
+        if part and part.Parent then
+            pcall(function() part.CanQuery=old.CanQuery; part.LocalTransparencyModifier=old.LocalTransparencyModifier end)
+        end
+    end
+end
+local function prepareWallbang()
+    if wallBusy or not CFG.Wallbang then return end
+    Camera=workspace.CurrentCamera; if not Camera then return end
+    wallBusy=true
+    local vp=Camera.ViewportSize
+    local ray=Camera:ViewportPointToRay(vp.X*0.5,vp.Y*0.5)
+    local ign={}; if LP.Character then ign[1]=LP.Character end
+    local origin=ray.Origin; local direction=ray.Direction*5000
+    for _=1,CFG.PenetrationDepth do
+        wallParams.FilterDescendantsInstances=ign
+        local hit=workspace:Raycast(origin,direction,wallParams)
+        if not hit or not hit.Instance then break end
+        local part=hit.Instance
+        if characterPart(part) then break end
+        if part:IsA("BasePart") then
+            rememberWall(part)
+            pcall(function() part.CanQuery=false; part.LocalTransparencyModifier=math.max(part.LocalTransparencyModifier,0.6) end)
+        end
+        ign[#ign+1]=part
+    end
+    task.delay(0.15, function() restoreWalls(); wallBusy=false end)
+end
 
-RunService.RenderStepped:Connect(function()
-    sw=cam.ViewportSize.X; sh=cam.ViewportSize.Y
-    currentTarget=getBest()
-    doAimbot()
-    doTriggerBot()
-    drawESP()
-    fovC.Position=Vector2.new(sw/2,sh/2)
-    fovC.Radius=cfg.FOV
-    fovC.Visible=cfg.ShowFOV
+-- ─── ESP UPDATE LOOP ──────────────────────────────────────────────────────────
+local updateAcc=0
+connect(RunService.Heartbeat, function(dt)
+    if not running then return end
+    updateAcc+=dt; if updateAcc<CFG.ESPUpdateRate then return end; updateAcc=0
+    Camera=workspace.CurrentCamera; if not Camera then return end
+    if CFG.HeadExpand then updateHeads() elseif next(originalHeads) then restoreHeads() end
+    local camPos=Camera.CFrame.Position
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p~=LP then
+            local c=p.Character; local head=c and c:FindFirstChild("Head"); local root=getRoot(p)
+            if head and root then
+                local d=ESP[p]
+                if not d or d.Head~=head then createESP(p); d=ESP[p] end
+                if d then
+                    local dist=(root.Position-camPos).Magnitude
+                    local show=CFG.ESP and validTarget(p) and dist<=CFG.MaxDistance
+                    if show then
+                        d.Highlight.FillTransparency=CFG.HighlightFill and 0.75 or 1
+                        d.Highlight.OutlineTransparency=0; d.Highlight.Enabled=CFG.Highlight
+                        d.HeadBox.Visible=CFG.BoxESP; d.HeadBox.Size=head.Size
+                        local pieces={}
+                        if CFG.Name     then pieces[#pieces+1]=p.DisplayName end
+                        if CFG.Health   then pieces[#pieces+1]=math.floor(getHP(p)).." HP" end
+                        if CFG.Distance then pieces[#pieces+1]=math.floor(dist).."m" end
+                        d.Gui.Enabled=#pieces>0; d.Text.Text=table.concat(pieces," | ")
+                    else hideESP(d) end
+                end
+            elseif ESP[p] then hideESP(ESP[p]) end
+        end
+    end
 end)
 
-print("[BananeService v3] loaded — INSERT toggle menu")
+-- ─── AIMBOT LOOP ──────────────────────────────────────────────────────────────
+connect(RunService.RenderStepped, function(dt)
+    if not running or not CFG.Aimbot then return end
+    if CFG.AimHoldRMB and not aimHeld then return end
+    Camera=workspace.CurrentCamera; if not Camera then return end
+    local target=getBestAimTarget(); if not target then return end
+    local alpha=math.clamp(dt*CFG.AimSmooth,0,1)
+    Camera.CFrame=Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position,target.Position),alpha)
+end)
+
+-- ─── VIEWMODEL ────────────────────────────────────────────────────────────────
+local detVM,detBaseRel,detOrigScale,lastVMScan,lastVMFOV=nil,nil,nil,0,nil
+local vmBindName="BananeVM_"..math.random(100000,999999)
+local vmWasEnabled=false
+
+local function restoreVM()
+    if detVM and detVM.Parent and detOrigScale then pcall(function() detVM:ScaleTo(detOrigScale) end) end
+    detVM=nil; detBaseRel=nil; detOrigScale=nil; lastVMFOV=nil
+end
+local function mpCount(m) local n=0; for _,o in ipairs(m:GetDescendants()) do if o:IsA("BasePart") then n+=1 end end; return n end
+local function vmScore(m)
+    local nm=string.lower(m.Name); local s=mpCount(m)
+    if nm:find("viewmodel") or nm:find("view_model") then s+=1000 end
+    if nm:find("arms") or nm:find("arm") then s+=500 end
+    if nm:find("weapon") or nm:find("gun") then s+=300 end
+    if nm:find("vm") then s+=150 end; return s
+end
+local function findVM(force)
+    Camera=workspace.CurrentCamera; if not Camera then return nil end
+    if not force and detVM and detVM.Parent and detVM:IsDescendantOf(Camera) then return detVM end
+    local now=os.clock(); if not force and now-lastVMScan<0.4 then return nil end; lastVMScan=now
+    local best,bs=nil,-1
+    for _,o in ipairs(Camera:GetDescendants()) do
+        if o:IsA("Model") and (not LP.Character or not o:IsDescendantOf(LP.Character)) then
+            if mpCount(o)>0 then local sc=vmScore(o); if sc>bs then best=o; bs=sc end end
+        end
+    end
+    if best then
+        restoreVM(); detVM=best
+        local ok,piv=pcall(function() return best:GetPivot() end); if ok and piv then detBaseRel=Camera.CFrame:ToObjectSpace(piv) end
+        local ok2,sc=pcall(function() return best:GetScale() end); detOrigScale=ok2 and sc or 1
+    end
+    return detVM
+end
+local function applyVMScale(vm)
+    if not vm or not detOrigScale or lastVMFOV==CFG.ViewmodelFOV then return end
+    local r=math.clamp(75/math.max(CFG.ViewmodelFOV,1),0.6,1.55)
+    pcall(function() vm:ScaleTo(detOrigScale*r) end); lastVMFOV=CFG.ViewmodelFOV
+end
+local function updateVM()
+    if not CFG.ViewmodelEnabled then return end
+    Camera=workspace.CurrentCamera; if not Camera then return end
+    local vm=findVM(false) or findVM(true); if not vm then return end
+    if not detBaseRel then
+        local ok,piv=pcall(function() return vm:GetPivot() end); if not ok or not piv then return end
+        detBaseRel=Camera.CFrame:ToObjectSpace(piv)
+    end
+    applyVMScale(vm)
+    pcall(function() vm:PivotTo(Camera.CFrame*detBaseRel*CFrame.new(CFG.ViewmodelX,CFG.ViewmodelY,CFG.ViewmodelZ)) end)
+end
+pcall(function()
+    RunService:BindToRenderStep(vmBindName, Enum.RenderPriority.Camera.Value+20, function()
+        if not running then return end
+        if CFG.ViewmodelEnabled then vmWasEnabled=true; updateVM()
+        elseif vmWasEnabled then vmWasEnabled=false; restoreVM() end
+    end)
+end)
+
+-- ─── INPUT ────────────────────────────────────────────────────────────────────
+connect(UIS.InputBegan, function(input, processed)
+    if input.UserInputType==Enum.UserInputType.MouseButton2 then aimHeld=true end
+    if bindingKey and input.KeyCode~=Enum.KeyCode.Unknown then
+        CFG[bindingKey]=input.KeyCode
+        if bindingButton then bindingButton.Text=input.KeyCode.Name end
+        bindingKey=nil; bindingButton=nil; return
+    end
+    if input.UserInputType==Enum.UserInputType.MouseButton1 and CFG.Wallbang then prepareWallbang() end
+    if processed then return end
+    if input.KeyCode==Enum.KeyCode.Unknown then return end
+    if input.KeyCode==CFG.MenuKey then window.Visible=not window.Visible
+    elseif input.KeyCode==CFG.AimbotKey   then CFG.Aimbot=not CFG.Aimbot
+    elseif input.KeyCode==CFG.ESPKey      then CFG.ESP=not CFG.ESP; if not CFG.ESP then for _,d in pairs(ESP) do hideESP(d) end end
+    elseif input.KeyCode==CFG.WallbangKey then CFG.Wallbang=not CFG.Wallbang; if not CFG.Wallbang then restoreWalls() end
+    elseif input.KeyCode==CFG.PotatoKey   then applyPotatoMode(not CFG.PotatoMode); task.defer(refreshAllESP)
+    elseif input.KeyCode==CFG.UnloadKey   then if ENV.BananeService then task.defer(ENV.BananeService.Unload) end end
+end)
+connect(UIS.InputEnded, function(i) if i.UserInputType==Enum.UserInputType.MouseButton2 then aimHeld=false end end)
+
+-- ─── UNLOAD ───────────────────────────────────────────────────────────────────
+local unloading=false
+local function unload()
+    if unloading then return end; unloading=true; running=false
+    pcall(function() RunService:UnbindFromRenderStep(vmBindName) end)
+    restoreVM(); restoreHeads(); restoreWalls(); applyPotatoMode(false); clearRoundTeam()
+    for _,c in ipairs(connections) do pcall(function() c:Disconnect() end) end
+    for p in pairs(ESP) do removeESP(p) end
+    pcall(function() gui:Destroy() end)
+    ENV.BananeService=nil
+    print("[BANANE SERVICE] unloaded")
+end
+
+connect(closeBtn.MouseButton1Click, unload)
+
+ENV.BananeService = {
+    Config=CFG, Unload=unload,
+    RebuildTeam=rebuildRoundTeam,
+    IsTeammate=teammate,
+    IsTarget=validTarget,
+}
+
+print("[BANANE SERVICE V1] loaded | discord.gg/Gc2zKtGadB")
