@@ -1,0 +1,799 @@
+-- Blox Strike External Cheat | Lua executor script (Synapse X / KRNL / Fluxus)
+-- Runtime: Roblox Lua 5.1 | Game: Blox Strike
+-- UI: Custom ImGui-style drawing via DrawingLib + ScreenGui
+
+-- ─── SERVICES ────────────────────────────────────────────────────────────────
+local Players       = game:GetService("Players")
+local RunService    = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace     = game:GetService("Workspace")
+local TweenService  = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local lp           = Players.LocalPlayer
+local cam          = Workspace.CurrentCamera
+local mouse        = lp:GetMouse()
+
+-- ─── CONFIG ──────────────────────────────────────────────────────────────────
+local cfg = {
+    -- Aim Assist
+    AimAssist       = true,
+    SilentAim       = true,
+    ShowFOVCircle   = true,
+    VisibleCheck    = true,
+    FOVRadius       = 120,
+    AimSmooth       = 0.18,  -- 0=instant 1=slow
+    AimBone         = "Head",
+
+    -- Trigger Bot
+    TriggerBot      = true,
+    TriggerDelay    = 0.08,
+
+    -- Rage Mode
+    WallBang        = false,
+    AutoFire        = true,
+    FireDelay       = 0.1,
+
+    -- ESP
+    ESPEnabled      = true,
+    ESPBoxes        = true,
+    ESPSkeleton     = true,
+    ESPNames        = true,
+    ESPHealth       = true,
+    ESPDistance     = true,
+    ESPMaxDist      = 500,
+
+    -- Skin Changer
+    SkinChanger     = false,
+    SelectedSkin    = "AK-47 | Gold",
+
+    -- UI
+    MenuOpen        = true,
+    AccentColor     = Color3.fromRGB(255, 180, 0),
+    DarkBg          = Color3.fromRGB(18, 14, 8),
+    PanelBg         = Color3.fromRGB(26, 20, 10),
+}
+
+-- ─── UTIL ─────────────────────────────────────────────────────────────────────
+local function getRoot(char)
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getBone(char, bone)
+    return char and (char:FindFirstChild(bone) or char:FindFirstChild("HumanoidRootPart"))
+end
+
+local function getHP(char)
+    local h = char and char:FindFirstChildOfClass("Humanoid")
+    return h and h.Health or 0, h and h.MaxHealth or 100
+end
+
+local function isAlive(player)
+    local char = player.Character
+    if not char then return false end
+    local h = char:FindFirstChildOfClass("Humanoid")
+    return h and h.Health > 0
+end
+
+local function isTeam(player)
+    return player.Team == lp.Team
+end
+
+local function worldToViewport(pos)
+    local screen, onScreen = cam:WorldToViewportPoint(pos)
+    return Vector2.new(screen.X, screen.Y), screen.Z, onScreen
+end
+
+local function getEnemies()
+    local out = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp and isAlive(p) and not isTeam(p) then
+            table.insert(out, p)
+        end
+    end
+    return out
+end
+
+local function isVisible(char)
+    local bone = getBone(char, cfg.AimBone)
+    if not bone then return false end
+    local origin = cam.CFrame.Position
+    local dir    = (bone.Position - origin)
+    local rp = RaycastParams.new()
+    rp.FilterDescendantsInstances = {lp.Character, char}
+    rp.FilterType = Enum.RaycastFilterType.Exclude
+    local result = Workspace:Raycast(origin, dir, rp)
+    return result == nil
+end
+
+-- ─── BEST TARGET ─────────────────────────────────────────────────────────────
+local function getBestTarget()
+    local center  = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    local bestDist= cfg.FOVRadius + 1
+    local bestPly = nil
+
+    for _, p in ipairs(getEnemies()) do
+        local char = p.Character
+        if not char then continue end
+        local bone = getBone(char, cfg.AimBone)
+        if not bone then continue end
+        local screen, depth, onScreen = worldToViewport(bone.Position)
+        if not onScreen or depth < 0 then continue end
+        if cfg.VisibleCheck and not isVisible(char) then continue end
+        local dist = (screen - center).Magnitude
+        if dist < bestDist then
+            bestDist = dist
+            bestPly  = p
+        end
+    end
+    return bestPly
+end
+
+-- ─── SILENT AIM ──────────────────────────────────────────────────────────────
+-- Hooks the bullet raycast to redirect to target head
+local silentTarget = nil
+
+local function initSilentAim()
+    -- hook via __newindex on camera / remote intercept pattern
+    -- works on executors with hookfunction support (Synapse X, KRNL)
+    if not hookfunction then return end
+
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if method == "FireServer" or method == "InvokeServer" then
+            if cfg.SilentAim and silentTarget then
+                local char = silentTarget.Character
+                if char then
+                    local bone = getBone(char, cfg.AimBone)
+                    if bone then
+                        local args = {...}
+                        -- Blox Strike typically sends CFrame / Vector3 as arg[1] or arg[2]
+                        -- patch position arg if it's a CFrame or Vector3
+                        for i, v in ipairs(args) do
+                            if typeof(v) == "CFrame" then
+                                args[i] = CFrame.new(bone.Position) * (v - v.Position)
+                                break
+                            elseif typeof(v) == "Vector3" then
+                                args[i] = bone.Position
+                                break
+                            end
+                        end
+                        return oldNamecall(self, table.unpack(args))
+                    end
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+end
+
+-- ─── AIM ASSIST ──────────────────────────────────────────────────────────────
+local function doAimAssist(target)
+    if not target or not cfg.AimAssist then return end
+    local char = target.Character
+    if not char then return end
+    local bone = getBone(char, cfg.AimBone)
+    if not bone then return end
+
+    local bonePos  = bone.Position
+    local camCF    = cam.CFrame
+    local lookAt   = CFrame.new(camCF.Position, bonePos)
+    cam.CFrame     = camCF:Lerp(lookAt, 1 - cfg.AimSmooth)
+end
+
+-- ─── TRIGGER BOT ─────────────────────────────────────────────────────────────
+local triggerCooldown = 0
+
+local function doTriggerBot()
+    if not cfg.TriggerBot then return end
+    if tick() - triggerCooldown < cfg.TriggerDelay then return end
+
+    local target = getBestTarget()
+    if not target then return end
+    local char   = target.Character
+    if not char  then return end
+    local bone   = getBone(char, cfg.AimBone)
+    if not bone  then return end
+
+    local screen, _, onScreen = worldToViewport(bone.Position)
+    if not onScreen then return end
+    local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    if (screen - center).Magnitude < 12 then
+        -- simulate mouse click
+        mouse1click()
+        triggerCooldown = tick()
+    end
+end
+
+-- ─── SKIN CHANGER ─────────────────────────────────────────────────────────────
+local skins = {
+    ["AK-47 | Gold"]      = "rbxassetid://7890001",
+    ["M4A4 | Dragon"]     = "rbxassetid://7890002",
+    ["AWP | Neon"]        = "rbxassetid://7890003",
+    ["Desert Eagle | Fire"]="rbxassetid://7890004",
+    ["Knife | Shadow"]    = "rbxassetid://7890005",
+}
+-- FILL: replace rbxassetid values with actual Blox Strike skin asset IDs from game files
+
+local function applySkin(skinName)
+    local char = lp.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then return end
+    local handle = tool:FindFirstChild("Handle")
+    if not handle then return end
+    local mesh = handle:FindFirstChildOfClass("SpecialMesh") or handle:FindFirstChildOfClass("MeshPart")
+    if mesh and skins[skinName] then
+        if mesh:IsA("SpecialMesh") then
+            mesh.TextureId = skins[skinName]
+        elseif mesh:IsA("MeshPart") then
+            mesh.TextureID = skins[skinName]
+        end
+    end
+end
+
+-- ─── ESP ─────────────────────────────────────────────────────────────────────
+local espObjects = {}
+
+local function getOrCreate(key, class, props)
+    if not espObjects[key] then
+        local obj = Drawing.new(class)
+        for k,v in pairs(props) do obj[k] = v end
+        espObjects[key] = obj
+    end
+    return espObjects[key]
+end
+
+local function clearESP(key)
+    if espObjects[key] then
+        espObjects[key].Visible = false
+    end
+end
+
+local function drawESP()
+    -- hide all first
+    for _, obj in pairs(espObjects) do obj.Visible = false end
+
+    if not cfg.ESPEnabled then return end
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == lp then continue end
+        if not isAlive(p) then continue end
+
+        local char = p.Character
+        if not char then continue end
+
+        local root = getRoot(char)
+        local head = char:FindFirstChild("Head")
+        if not root or not head then continue end
+
+        local rootScr, rootDepth, rootOn = worldToViewport(root.Position)
+        local headScr, _, headOn         = worldToViewport(head.Position + Vector3.new(0,0.7,0))
+        if not rootOn or not headOn then continue end
+        if rootDepth > cfg.ESPMaxDist then continue end
+
+        local isEnemy = not isTeam(p)
+        local col     = isEnemy and Color3.fromRGB(255,60,60) or Color3.fromRGB(60,180,255)
+
+        local height = math.abs(rootScr.Y - headScr.Y) * 2.2
+        local width  = height * 0.45
+        local top    = Vector2.new(headScr.X, headScr.Y)
+
+        -- box
+        if cfg.ESPBoxes then
+            local box = getOrCreate(p.UserId.."box", "Square", {
+                Thickness=1.5, Filled=false, Color=col, Visible=true
+            })
+            box.Position = Vector2.new(top.X - width/2, top.Y)
+            box.Size     = Vector2.new(width, height)
+            box.Color    = col
+            box.Visible  = true
+        end
+
+        -- name
+        if cfg.ESPNames then
+            local nameTag = getOrCreate(p.UserId.."name", "Text", {
+                Size=13, Center=true, Outline=true,
+                OutlineColor=Color3.new(0,0,0), Font=2, Visible=true
+            })
+            nameTag.Text     = p.DisplayName
+            nameTag.Color    = col
+            nameTag.Position = Vector2.new(top.X, top.Y - 16)
+            nameTag.Visible  = true
+        end
+
+        -- health bar
+        if cfg.ESPHealth then
+            local hp, maxHp = getHP(char)
+            local hpRatio   = math.clamp(hp/maxHp, 0, 1)
+            local barH      = height
+            local bx        = top.X - width/2 - 6
+            local barBg = getOrCreate(p.UserId.."hpbg","Square",{
+                Thickness=1,Filled=true,Color=Color3.fromRGB(20,20,20),Visible=true
+            })
+            barBg.Position = Vector2.new(bx-2, top.Y)
+            barBg.Size     = Vector2.new(4, barH)
+            barBg.Visible  = true
+
+            local barFg = getOrCreate(p.UserId.."hpfg","Square",{
+                Thickness=1,Filled=true,
+                Color=Color3.fromRGB(0, 220, 60),Visible=true
+            })
+            local fgH = barH * hpRatio
+            barFg.Position = Vector2.new(bx-2, top.Y + barH - fgH)
+            barFg.Size     = Vector2.new(4, fgH)
+            barFg.Color    = Color3.fromRGB(
+                math.floor(255*(1-hpRatio)),
+                math.floor(220*hpRatio), 40)
+            barFg.Visible  = true
+        end
+
+        -- distance
+        if cfg.ESPDistance then
+            local distTag = getOrCreate(p.UserId.."dist","Text",{
+                Size=11,Center=true,Outline=true,
+                OutlineColor=Color3.new(0,0,0),Font=2,Visible=true
+            })
+            distTag.Text     = string.format("%.0fm", rootDepth * 0.0254)
+            distTag.Color    = Color3.fromRGB(200,200,200)
+            distTag.Position = Vector2.new(top.X, top.Y + height + 2)
+            distTag.Visible  = true
+        end
+
+        -- skeleton
+        if cfg.ESPSkeleton then
+            local bones = {
+                {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+                {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+                {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+                {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+                {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+            }
+            for i, pair in ipairs(bones) do
+                local a = char:FindFirstChild(pair[1])
+                local b = char:FindFirstChild(pair[2])
+                if a and b then
+                    local sa, _, onA = worldToViewport(a.Position)
+                    local sb, _, onB = worldToViewport(b.Position)
+                    if onA and onB then
+                        local line = getOrCreate(p.UserId.."sk"..i,"Line",{
+                            Thickness=1.1,Color=col,Visible=true
+                        })
+                        line.From    = sa
+                        line.To      = sb
+                        line.Color   = col
+                        line.Visible = true
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ─── FOV CIRCLE ──────────────────────────────────────────────────────────────
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible   = false
+fovCircle.Thickness = 1.5
+fovCircle.Color     = Color3.fromRGB(255, 180, 0)
+fovCircle.Filled    = false
+fovCircle.NumSides  = 64
+
+-- ─── UI ──────────────────────────────────────────────────────────────────────
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name            = "BananeService"
+screenGui.ResetOnSpawn    = false
+screenGui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
+screenGui.IgnoreGuiInset  = true
+screenGui.Parent          = game:GetService("CoreGui")
+
+-- drag helper
+local function makeDraggable(frame, handle)
+    local dragging, dragStart, startPos
+    handle.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging  = true
+            dragStart = i.Position
+            startPos  = frame.Position
+        end
+    end)
+    handle.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    handle.InputChanged:Connect(function(i)
+        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = i.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- gold gradient title bar
+local mainFrame = Instance.new("Frame")
+mainFrame.Size            = UDim2.new(0, 520, 0, 440)
+mainFrame.Position        = UDim2.new(0.5, -260, 0.5, -220)
+mainFrame.BackgroundColor3= cfg.DarkBg
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent          = screenGui
+
+local uicorner = Instance.new("UICorner")
+uicorner.CornerRadius = UDim.new(0, 8)
+uicorner.Parent = mainFrame
+
+-- gold border stroke
+local stroke = Instance.new("UIStroke")
+stroke.Color     = cfg.AccentColor
+stroke.Thickness = 2
+stroke.Parent    = mainFrame
+
+-- title bar
+local titleBar = Instance.new("Frame")
+titleBar.Size             = UDim2.new(1, 0, 0, 44)
+titleBar.BackgroundColor3 = Color3.fromRGB(22, 16, 4)
+titleBar.BorderSizePixel  = 0
+titleBar.Parent           = mainFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0,8)
+titleCorner.Parent = titleBar
+
+-- crown icon + title
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size              = UDim2.new(1,0,1,0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text              = "👑  BANANE SERVICE"
+titleLabel.TextColor3        = cfg.AccentColor
+titleLabel.TextSize          = 18
+titleLabel.Font              = Enum.Font.GothamBold
+titleLabel.Parent            = titleBar
+
+makeDraggable(mainFrame, titleBar)
+
+-- close button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size             = UDim2.new(0,28,0,28)
+closeBtn.Position         = UDim2.new(1,-34,0,8)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180,40,40)
+closeBtn.Text             = "✕"
+closeBtn.TextColor3       = Color3.new(1,1,1)
+closeBtn.TextSize         = 14
+closeBtn.Font             = Enum.Font.GothamBold
+closeBtn.BorderSizePixel  = 0
+closeBtn.Parent           = titleBar
+
+local cc = Instance.new("UICorner")
+cc.CornerRadius = UDim.new(0,6)
+cc.Parent = closeBtn
+
+closeBtn.MouseButton1Click:Connect(function()
+    cfg.MenuOpen = not cfg.MenuOpen
+    mainFrame.Visible = cfg.MenuOpen
+end)
+
+-- ─── PANEL BUILDER ───────────────────────────────────────────────────────────
+local function makePanel(parent, title, pos, size)
+    local panel = Instance.new("Frame")
+    panel.Size             = size
+    panel.Position         = pos
+    panel.BackgroundColor3 = cfg.PanelBg
+    panel.BorderSizePixel  = 0
+    panel.Parent           = parent
+
+    local pc = Instance.new("UICorner")
+    pc.CornerRadius = UDim.new(0,6)
+    pc.Parent = panel
+
+    local ps = Instance.new("UIStroke")
+    ps.Color     = Color3.fromRGB(80,55,10)
+    ps.Thickness = 1
+    ps.Parent    = panel
+
+    local header = Instance.new("Frame")
+    header.Size             = UDim2.new(1,0,0,26)
+    header.BackgroundColor3 = Color3.fromRGB(30,22,6)
+    header.BorderSizePixel  = 0
+    header.Parent           = panel
+
+    local hc = Instance.new("UICorner")
+    hc.CornerRadius = UDim.new(0,6)
+    hc.Parent = header
+
+    local htitle = Instance.new("TextLabel")
+    htitle.Size              = UDim2.new(1,-10,1,0)
+    htitle.Position          = UDim2.new(0,10,0,0)
+    htitle.BackgroundTransparency = 1
+    htitle.Text              = title
+    htitle.TextColor3        = cfg.AccentColor
+    htitle.TextSize          = 12
+    htitle.Font              = Enum.Font.GothamBold
+    htitle.TextXAlignment    = Enum.TextXAlignment.Left
+    htitle.Parent            = header
+
+    local content = Instance.new("Frame")
+    content.Size             = UDim2.new(1,-10,1,-32)
+    content.Position         = UDim2.new(0,5,0,30)
+    content.BackgroundTransparency = 1
+    content.Parent           = panel
+
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder    = Enum.SortOrder.LayoutOrder
+    layout.Padding      = UDim.new(0,6)
+    layout.Parent       = content
+
+    return content
+end
+
+-- toggle builder
+local function makeToggle(parent, label, key, order)
+    local row = Instance.new("Frame")
+    row.Size             = UDim2.new(1,0,0,22)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder      = order or 0
+    row.Parent           = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size             = UDim2.new(1,-40,1,0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text             = label
+    lbl.TextColor3       = Color3.fromRGB(210,200,180)
+    lbl.TextSize         = 12
+    lbl.Font             = Enum.Font.Gotham
+    lbl.TextXAlignment   = Enum.TextXAlignment.Left
+    lbl.Parent           = row
+
+    local togBg = Instance.new("Frame")
+    togBg.Size             = UDim2.new(0,36,0,18)
+    togBg.Position         = UDim2.new(1,-38,0.5,-9)
+    togBg.BackgroundColor3 = cfg[key] and cfg.AccentColor or Color3.fromRGB(50,50,50)
+    togBg.BorderSizePixel  = 0
+    togBg.Parent           = row
+
+    local tc = Instance.new("UICorner")
+    tc.CornerRadius = UDim.new(1,0)
+    tc.Parent = togBg
+
+    local knob = Instance.new("Frame")
+    knob.Size             = UDim2.new(0,14,0,14)
+    knob.Position         = cfg[key] and UDim2.new(1,-16,0.5,-7) or UDim2.new(0,2,0.5,-7)
+    knob.BackgroundColor3 = Color3.new(1,1,1)
+    knob.BorderSizePixel  = 0
+    knob.Parent           = togBg
+
+    local kc = Instance.new("UICorner")
+    kc.CornerRadius = UDim.new(1,0)
+    kc.Parent = knob
+
+    local btn = Instance.new("TextButton")
+    btn.Size             = UDim2.new(1,0,1,0)
+    btn.BackgroundTransparency = 1
+    btn.Text             = ""
+    btn.Parent           = row
+
+    btn.MouseButton1Click:Connect(function()
+        cfg[key] = not cfg[key]
+        local on = cfg[key]
+        togBg.BackgroundColor3 = on and cfg.AccentColor or Color3.fromRGB(50,50,50)
+        TweenService:Create(knob, TweenInfo.new(0.12), {
+            Position = on and UDim2.new(1,-16,0.5,-7) or UDim2.new(0,2,0.5,-7)
+        }):Play()
+        if key == "SkinChanger" and on then applySkin(cfg.SelectedSkin) end
+    end)
+end
+
+-- slider builder
+local function makeSlider(parent, label, key, min, max, order)
+    local row = Instance.new("Frame")
+    row.Size             = UDim2.new(1,0,0,32)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder      = order or 0
+    row.Parent           = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size             = UDim2.new(1,0,0,14)
+    lbl.BackgroundTransparency = 1
+    lbl.Text             = label
+    lbl.TextColor3       = Color3.fromRGB(210,200,180)
+    lbl.TextSize         = 11
+    lbl.Font             = Enum.Font.Gotham
+    lbl.TextXAlignment   = Enum.TextXAlignment.Left
+    lbl.Parent           = row
+
+    local valLbl = Instance.new("TextLabel")
+    valLbl.Size            = UDim2.new(0,40,0,14)
+    valLbl.Position        = UDim2.new(1,-42,0,0)
+    valLbl.BackgroundTransparency = 1
+    valLbl.Text            = tostring(cfg[key])
+    valLbl.TextColor3      = cfg.AccentColor
+    valLbl.TextSize        = 11
+    valLbl.Font            = Enum.Font.GothamBold
+    valLbl.TextXAlignment  = Enum.TextXAlignment.Right
+    valLbl.Parent          = row
+
+    local track = Instance.new("Frame")
+    track.Size             = UDim2.new(1,0,0,6)
+    track.Position         = UDim2.new(0,0,0,18)
+    track.BackgroundColor3 = Color3.fromRGB(40,30,10)
+    track.BorderSizePixel  = 0
+    track.Parent           = row
+
+    local trc = Instance.new("UICorner")
+    trc.CornerRadius = UDim.new(1,0)
+    trc.Parent = track
+
+    local ratio = (cfg[key] - min) / (max - min)
+    local fill  = Instance.new("Frame")
+    fill.Size             = UDim2.new(ratio,0,1,0)
+    fill.BackgroundColor3 = cfg.AccentColor
+    fill.BorderSizePixel  = 0
+    fill.Parent           = track
+
+    local fc = Instance.new("UICorner")
+    fc.CornerRadius = UDim.new(1,0)
+    fc.Parent = fill
+
+    local sliding = false
+    local trackBtn = Instance.new("TextButton")
+    trackBtn.Size             = UDim2.new(1,0,0,20)
+    trackBtn.Position         = UDim2.new(0,0,0,12)
+    trackBtn.BackgroundTransparency = 1
+    trackBtn.Text             = ""
+    trackBtn.Parent           = row
+
+    local function updateSlider(inputX)
+        local abs  = track.AbsolutePosition.X
+        local w    = track.AbsoluteSize.X
+        local r    = math.clamp((inputX - abs)/w, 0, 1)
+        local val  = math.floor(min + r*(max-min))
+        if key == "TriggerDelay" or key == "FireDelay" or key == "AimSmooth" then
+            val = math.floor((min + r*(max-min))*100)/100
+        end
+        cfg[key]         = val
+        fill.Size        = UDim2.new(r,0,1,0)
+        valLbl.Text      = tostring(val)
+    end
+
+    trackBtn.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            sliding = true
+            updateSlider(i.Position.X)
+        end
+    end)
+    trackBtn.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then sliding = false end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if sliding and i.UserInputType == Enum.UserInputType.MouseMovement then
+            updateSlider(i.Position.X)
+        end
+    end)
+end
+
+-- ─── BUILD PANELS ─────────────────────────────────────────────────────────────
+-- Left column
+local aimPanel  = makePanel(mainFrame, "⊕  AIM ASSIST",
+    UDim2.new(0,8,0,52), UDim2.new(0,245,0,170))
+makeToggle(aimPanel, "Aim Assist",    "AimAssist",    1)
+makeToggle(aimPanel, "Silent Aim",    "SilentAim",    2)
+makeToggle(aimPanel, "Show FOV Circle","ShowFOVCircle",3)
+makeToggle(aimPanel, "Visible Check", "VisibleCheck", 4)
+makeSlider(aimPanel, "FOV Radius",    "FOVRadius",    20, 300, 5)
+makeSlider(aimPanel, "Smoothing",     "AimSmooth",    0.01, 1, 6)
+
+local teamPanel = makePanel(mainFrame, "👥  TEAM CHECK",
+    UDim2.new(0,8,0,232), UDim2.new(0,245,0,80))
+makeSlider(teamPanel, "FOV Radius", "FOVRadius", 20, 300, 1)
+
+-- Right column
+local trigPanel = makePanel(mainFrame, "⚡  TRIGGER BOT",
+    UDim2.new(0,261,0,52), UDim2.new(0,251,0,100))
+makeToggle(trigPanel, "Trigger Bot", "TriggerBot", 1)
+makeSlider(trigPanel, "Delay",       "TriggerDelay", 0.01, 0.5, 2)
+
+local ragePanel = makePanel(mainFrame, "⚙  RAGE MODE",
+    UDim2.new(0,261,0,162), UDim2.new(0,251,0,120))
+makeToggle(ragePanel, "Wall Bang",  "WallBang",  1)
+makeToggle(ragePanel, "Auto Fire",  "AutoFire",  2)
+makeSlider(ragePanel, "Fire Delay", "FireDelay", 0.01, 0.5, 3)
+
+-- Bottom row — ESP
+local espPanel = makePanel(mainFrame, "👁  ESP",
+    UDim2.new(0,8,0,322), UDim2.new(0,245,0,110))
+makeToggle(espPanel, "Enable ESP",   "ESPEnabled",  1)
+makeToggle(espPanel, "Boxes",        "ESPBoxes",    2)
+makeToggle(espPanel, "Skeleton",     "ESPSkeleton", 3)
+makeToggle(espPanel, "Names",        "ESPNames",    4)
+makeToggle(espPanel, "Health Bars",  "ESPHealth",   5)
+
+-- Skin Changer
+local skinPanel = makePanel(mainFrame, "🎨  SKIN CHANGER",
+    UDim2.new(0,261,0,292), UDim2.new(0,251,0,140))
+makeToggle(skinPanel, "Enable",      "SkinChanger", 1)
+
+local skinNames = {}
+for k in pairs(skins) do table.insert(skinNames, k) end
+local skinIdx = 1
+
+local skinLbl = Instance.new("TextLabel")
+skinLbl.Size            = UDim2.new(1,0,0,18)
+skinLbl.BackgroundTransparency = 1
+skinLbl.Text            = skinNames[skinIdx]
+skinLbl.TextColor3      = cfg.AccentColor
+skinLbl.TextSize        = 11
+skinLbl.Font            = Enum.Font.Gotham
+skinLbl.TextXAlignment  = Enum.TextXAlignment.Left
+skinLbl.LayoutOrder     = 2
+skinLbl.Parent          = skinPanel
+
+local prevBtn = Instance.new("TextButton")
+prevBtn.Size            = UDim2.new(0,24,0,20)
+prevBtn.BackgroundColor3= Color3.fromRGB(50,38,10)
+prevBtn.Text            = "◀"
+prevBtn.TextColor3      = cfg.AccentColor
+prevBtn.TextSize        = 12
+prevBtn.Font            = Enum.Font.GothamBold
+prevBtn.BorderSizePixel = 0
+prevBtn.LayoutOrder     = 3
+prevBtn.Parent          = skinPanel
+
+local nextBtn = Instance.new("TextButton")
+nextBtn.Size            = UDim2.new(0,24,0,20)
+nextBtn.BackgroundColor3= Color3.fromRGB(50,38,10)
+nextBtn.Text            = "▶"
+nextBtn.TextColor3      = cfg.AccentColor
+nextBtn.TextSize        = 12
+nextBtn.Font            = Enum.Font.GothamBold
+nextBtn.BorderSizePixel = 0
+nextBtn.LayoutOrder     = 4
+nextBtn.Parent          = skinPanel
+
+prevBtn.MouseButton1Click:Connect(function()
+    skinIdx = ((skinIdx-2) % #skinNames) + 1
+    cfg.SelectedSkin = skinNames[skinIdx]
+    skinLbl.Text     = skinNames[skinIdx]
+    if cfg.SkinChanger then applySkin(cfg.SelectedSkin) end
+end)
+nextBtn.MouseButton1Click:Connect(function()
+    skinIdx = (skinIdx % #skinNames) + 1
+    cfg.SelectedSkin = skinNames[skinIdx]
+    skinLbl.Text     = skinNames[skinIdx]
+    if cfg.SkinChanger then applySkin(cfg.SelectedSkin) end
+end)
+
+-- INSERT key toggle
+UserInputService.InputBegan:Connect(function(i, gpe)
+    if gpe then return end
+    if i.KeyCode == Enum.KeyCode.Insert then
+        cfg.MenuOpen  = not cfg.MenuOpen
+        mainFrame.Visible = cfg.MenuOpen
+    end
+end)
+
+-- ─── MAIN LOOP ────────────────────────────────────────────────────────────────
+initSilentAim()
+
+RunService.RenderStepped:Connect(function()
+    -- FOV circle
+    local center = cam.ViewportSize / 2
+    fovCircle.Position = center
+    fovCircle.Radius   = cfg.FOVRadius
+    fovCircle.Visible  = cfg.ShowFOVCircle and cfg.MenuOpen == false
+
+    -- best target for silent aim ref
+    silentTarget = getBestTarget()
+
+    -- aim assist (only while holding right click)
+    if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        doAimAssist(silentTarget)
+    end
+
+    -- trigger bot
+    doTriggerBot()
+
+    -- skin changer re-apply on weapon switch
+    if cfg.SkinChanger then applySkin(cfg.SelectedSkin) end
+
+    -- ESP
+    drawESP()
+end)
