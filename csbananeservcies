@@ -1,6 +1,4 @@
--- Blox Strike | Full Cheat | Synapse X / KRNL / Fluxus
--- RenderStepped loop + hookmetamethod silent aim
-
+-- Blox Strike | BananeService v3 | Synapse X / KRNL / Fluxus
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -9,108 +7,66 @@ local TweenService     = game:GetService("TweenService")
 local lp  = Players.LocalPlayer
 local cam = workspace.CurrentCamera
 
--- ─── CONFIG ──────────────────────────────────────────────────────────────────
+-- ─── CONFIG ───────────────────────────────────────────────────────────────────
 local cfg = {
-    -- Aimbot
-    Aimbot        = true,
-    AimbotKey     = "MouseButton2", -- hold RMB
-    AimBone       = "Head",
-    AimSmooth     = 0.15,
-    FOV           = 150,
-
-    -- Silent Aim
-    SilentAim     = true,
-
-    -- ESP
-    ESP           = true,
-    ESPBox        = true,
-    ESPSkeleton   = true,
-    ESPName       = true,
-    ESPHealth     = true,
-    ESPDist       = true,
-
-    -- Triggerbot
-    TriggerBot    = false,
-    TriggerDelay  = 0.08,
-
-    -- Misc
-    ShowFOV       = true,
-    TeamCheck     = true,
+    Aimbot       = true,
+    SilentAim    = true,
+    ShowFOV      = true,
+    TeamCheck    = true,
+    FOV          = 150,
+    AimSmooth    = 0.15,
+    AimBone      = "Head",
+    TriggerBot   = false,
+    TriggerDelay = 0.08,
+    ESP          = true,
+    ESPBox       = true,
+    ESPSkeleton  = true,
+    ESPName      = true,
+    ESPHealth    = true,
+    ESPDist      = true,
 }
 
 -- ─── UTIL ─────────────────────────────────────────────────────────────────────
-local function getChar(p)   return p.Character end
-local function getHum(p)
-    local c = getChar(p)
-    return c and c:FindFirstChildOfClass("Humanoid")
-end
-local function getRoot(p)
-    local c = getChar(p)
-    return c and c:FindFirstChild("HumanoidRootPart")
-end
-local function getPart(p, name)
-    local c = getChar(p)
-    return c and (c:FindFirstChild(name) or c:FindFirstChild("HumanoidRootPart"))
-end
-local function alive(p)
-    local h = getHum(p)
-    return h and h.Health > 0 and h.Health == h.Health
-end
-local function sameTeam(p)
-    if not cfg.TeamCheck then return false end
-    return p.Team == lp.Team
-end
+local function getChar(p)  return p.Character end
+local function getHum(p)   local c=getChar(p); return c and c:FindFirstChildOfClass("Humanoid") end
+local function getRoot(p)  local c=getChar(p); return c and c:FindFirstChild("HumanoidRootPart") end
+local function getPart(p,n) local c=getChar(p); return c and (c:FindFirstChild(n) or c:FindFirstChild("HumanoidRootPart")) end
+local function alive(p)    local h=getHum(p); return h and h.Health>0 end
+local function sameTeam(p) return cfg.TeamCheck and p.Team==lp.Team end
+
+local sw,sh = cam.ViewportSize.X, cam.ViewportSize.Y
 
 local function toScreen(pos)
-    local s, vis = cam:WorldToViewportPoint(pos)
-    return Vector2.new(s.X, s.Y), s.Z, vis
+    local s,vis = cam:WorldToViewportPoint(pos)
+    return Vector2.new(s.X,s.Y), s.Z, vis
 end
 
-local sw = cam.ViewportSize.X
-local sh = cam.ViewportSize.Y
-RunService.RenderStepped:Connect(function()
-    sw = cam.ViewportSize.X
-    sh = cam.ViewportSize.Y
-end)
-
-local function inFOV(screenPos)
-    local cx, cy = sw/2, sh/2
-    local dx = screenPos.X - cx
-    local dy = screenPos.Y - cy
-    return math.sqrt(dx*dx + dy*dy) <= cfg.FOV
+local function inFOV(sp)
+    local dx=sp.X-sw/2; local dy=sp.Y-sh/2
+    return math.sqrt(dx*dx+dy*dy)<=cfg.FOV
 end
 
--- ─── ENEMY LIST ───────────────────────────────────────────────────────────────
 local function enemies()
-    local out = {}
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= lp and not sameTeam(p) and alive(p) then
-            local root = getRoot(p)
-            if root then
-                out[#out+1] = p
-            end
+    local out={}
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p~=lp and not sameTeam(p) and alive(p) and getRoot(p) then
+            out[#out+1]=p
         end
     end
     return out
 end
 
--- ─── BEST TARGET ─────────────────────────────────────────────────────────────
-local currentTarget = nil
+-- ─── TARGET ───────────────────────────────────────────────────────────────────
+local currentTarget=nil
 
 local function getBest()
-    local best, bestDist = nil, math.huge
-    local cx, cy = sw/2, sh/2
-    for _, p in ipairs(enemies()) do
-        local part = getPart(p, cfg.AimBone)
-        if not part then continue end
-        local scr, depth, vis = toScreen(part.Position)
-        if not vis or depth <= 0 then continue end
-        if not inFOV(scr) then continue end
-        local d = math.sqrt((scr.X-cx)^2 + (scr.Y-cy)^2)
-        if d < bestDist then
-            bestDist = d
-            best     = p
-        end
+    local best,bd=nil,math.huge
+    for _,p in ipairs(enemies()) do
+        local pt=getPart(p,cfg.AimBone); if not pt then continue end
+        local sp,dep,vis=toScreen(pt.Position)
+        if not vis or dep<=0 or not inFOV(sp) then continue end
+        local d=(sp-Vector2.new(sw/2,sh/2)).Magnitude
+        if d<bd then bd=d; best=p end
     end
     return best
 end
@@ -118,209 +74,111 @@ end
 -- ─── AIMBOT ───────────────────────────────────────────────────────────────────
 local function doAimbot()
     if not cfg.Aimbot then return end
-    local holding = false
-    if cfg.AimbotKey == "MouseButton2" then
-        holding = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-    else
-        holding = UserInputService:IsKeyDown(Enum.KeyCode[cfg.AimbotKey] or Enum.KeyCode.E)
-    end
-    if not holding then return end
-
-    local target = currentTarget
-    if not target then return end
-    local part = getPart(target, cfg.AimBone)
-    if not part then return end
-
-    local goal = CFrame.new(cam.CFrame.Position, part.Position)
-    cam.CFrame  = cam.CFrame:Lerp(goal, cfg.AimSmooth)
+    if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
+    if not currentTarget then return end
+    local pt=getPart(currentTarget,cfg.AimBone); if not pt then return end
+    cam.CFrame=cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position,pt.Position),cfg.AimSmooth)
 end
 
 -- ─── SILENT AIM ───────────────────────────────────────────────────────────────
 local function initSilentAim()
     if not hookmetamethod then return end
     local orig
-    orig = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if cfg.SilentAim and (method == "FireServer" or method == "InvokeServer") then
-            local target = currentTarget
-            if target then
-                local part = getPart(target, cfg.AimBone)
-                if part then
-                    local args = {...}
-                    for i = 1, #args do
-                        local v = args[i]
-                        if typeof(v) == "CFrame" then
-                            args[i] = CFrame.new(part.Position)
-                            return orig(self, table.unpack(args))
-                        elseif typeof(v) == "Vector3" then
-                            args[i] = part.Position
-                            return orig(self, table.unpack(args))
-                        end
-                    end
+    orig=hookmetamethod(game,"__namecall",newcclosure(function(self,...)
+        local m=getnamecallmethod()
+        if cfg.SilentAim and (m=="FireServer" or m=="InvokeServer") and currentTarget then
+            local pt=getPart(currentTarget,cfg.AimBone)
+            if pt then
+                local args={...}
+                for i=1,#args do
+                    if typeof(args[i])=="CFrame" then args[i]=CFrame.new(pt.Position); return orig(self,table.unpack(args))
+                    elseif typeof(args[i])=="Vector3" then args[i]=pt.Position; return orig(self,table.unpack(args)) end
                 end
             end
         end
-        return orig(self, ...)
+        return orig(self,...)
     end))
 end
 
 -- ─── TRIGGERBOT ───────────────────────────────────────────────────────────────
-local lastTrigger = 0
+local lastTrig=0
 local function doTrigger()
-    if not cfg.TriggerBot then return end
-    if tick() - lastTrigger < cfg.TriggerDelay then return end
-    local target = currentTarget
-    if not target then return end
-    local part = getPart(target, cfg.AimBone)
-    if not part then return end
-    local scr, _, vis = toScreen(part.Position)
-    if not vis then return end
-    local cx, cy = sw/2, sh/2
-    if math.sqrt((scr.X-cx)^2+(scr.Y-cy)^2) < 20 then
-        mouse1click()
-        lastTrigger = tick()
+    if not cfg.TriggerBot or tick()-lastTrig<cfg.TriggerDelay then return end
+    if not currentTarget then return end
+    local pt=getPart(currentTarget,cfg.AimBone); if not pt then return end
+    local sp,_,vis=toScreen(pt.Position)
+    if vis and (sp-Vector2.new(sw/2,sh/2)).Magnitude<20 then
+        mouse1click(); lastTrig=tick()
     end
 end
 
--- ─── ESP OBJECTS ──────────────────────────────────────────────────────────────
-local espCache = {}
-
-local function getDrawing(id, class, defaults)
-    if not espCache[id] then
-        local d = Drawing.new(class)
-        for k,v in pairs(defaults) do d[k] = v end
-        espCache[id] = d
-    end
-    return espCache[id]
-end
-
-local function hideAll()
-    for _, d in pairs(espCache) do
-        d.Visible = false
-    end
-end
-
-local SKELETON_PAIRS = {
-    {"Head","UpperTorso"},
-    {"UpperTorso","LowerTorso"},
-    {"LowerTorso","LeftUpperLeg"},
-    {"LeftUpperLeg","LeftLowerLeg"},
-    {"LeftLowerLeg","LeftFoot"},
-    {"LowerTorso","RightUpperLeg"},
-    {"RightUpperLeg","RightLowerLeg"},
-    {"RightLowerLeg","RightFoot"},
-    {"UpperTorso","LeftUpperArm"},
-    {"LeftUpperArm","LeftLowerArm"},
-    {"LeftLowerArm","LeftHand"},
-    {"UpperTorso","RightUpperArm"},
-    {"RightUpperArm","RightLowerArm"},
-    {"RightLowerArm","RightHand"},
+-- ─── ESP ──────────────────────────────────────────────────────────────────────
+local dc={}
+local SKEL={
+    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
 }
+local function gd(id,cls,props)
+    if not dc[id] then
+        local o=Drawing.new(cls)
+        for k,v in pairs(props) do o[k]=v end
+        dc[id]=o
+    end
+    return dc[id]
+end
 
 local function drawESP()
-    hideAll()
+    for _,o in pairs(dc) do o.Visible=false end
     if not cfg.ESP then return end
-
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p == lp then continue end
-        if not alive(p) then continue end
-        local char = getChar(p)
-        if not char then continue end
-
-        local head  = char:FindFirstChild("Head")
-        local root  = char:FindFirstChild("HumanoidRootPart")
-        local hum   = char:FindFirstChildOfClass("Humanoid")
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p==lp or not alive(p) then continue end
+        local c=getChar(p); if not c then continue end
+        local head=c:FindFirstChild("Head")
+        local root=c:FindFirstChild("HumanoidRootPart")
+        local hum=c:FindFirstChildOfClass("Humanoid")
         if not head or not root or not hum then continue end
-
-        -- top of head (slightly above)
-        local topPos    = head.Position + Vector3.new(0, 0.7, 0)
-        local botPos    = root.Position - Vector3.new(0, 3, 0)
-        local topScr, depth, topVis = toScreen(topPos)
-        local botScr, _,     botVis = toScreen(botPos)
-        if not topVis or not botVis or depth <= 0 then continue end
-
-        local isEnemy = not sameTeam(p)
-        local col = isEnemy
-            and Color3.fromRGB(255, 60, 60)
-            or  Color3.fromRGB(60, 180, 255)
-
-        local height = math.abs(botScr.Y - topScr.Y)
-        if height < 5 then continue end
-        local width  = height * 0.5
-        local cx     = topScr.X
-
-        -- ── BOX
+        local topS,dep,tVis=toScreen(head.Position+Vector3.new(0,0.7,0))
+        local botS,_,bVis=toScreen(root.Position-Vector3.new(0,3,0))
+        if not tVis or not bVis or dep<=0 then continue end
+        local col=sameTeam(p) and Color3.fromRGB(60,180,255) or Color3.fromRGB(255,60,60)
+        local h=math.abs(botS.Y-topS.Y); if h<5 then continue end
+        local w=h*0.5; local cx=topS.X
         if cfg.ESPBox then
-            local box = getDrawing(p.UserId.."box","Square",{Filled=false,Thickness=1.5})
-            box.Size     = Vector2.new(width, height)
-            box.Position = Vector2.new(cx - width/2, topScr.Y)
-            box.Color    = col
-            box.Visible  = true
+            local b=gd(p.UserId.."bx","Square",{Filled=false,Thickness=1.5})
+            b.Size=Vector2.new(w,h); b.Position=Vector2.new(cx-w/2,topS.Y)
+            b.Color=col; b.Visible=true
         end
-
-        -- ── NAME
         if cfg.ESPName then
-            local nameD = getDrawing(p.UserId.."name","Text",{
-                Size=13,Center=true,Outline=true,
-                OutlineColor=Color3.new(0,0,0),Font=2
-            })
-            nameD.Text     = p.DisplayName
-            nameD.Color    = col
-            nameD.Position = Vector2.new(cx, topScr.Y - 16)
-            nameD.Visible  = true
+            local n=gd(p.UserId.."nm","Text",{Size=13,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Font=2})
+            n.Text=p.DisplayName; n.Color=col
+            n.Position=Vector2.new(cx,topS.Y-16); n.Visible=true
         end
-
-        -- ── HEALTH BAR
         if cfg.ESPHealth then
-            local ratio = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-            local bx    = cx - width/2 - 7
-            local barH  = height
-
-            local hbg = getDrawing(p.UserId.."hbg","Square",{
-                Filled=true,Thickness=0,Color=Color3.fromRGB(10,10,10)
-            })
-            hbg.Size     = Vector2.new(4, barH)
-            hbg.Position = Vector2.new(bx, topScr.Y)
-            hbg.Visible  = true
-
-            local hfg = getDrawing(p.UserId.."hfg","Square",{Filled=true,Thickness=0})
-            local fh = barH * ratio
-            hfg.Size     = Vector2.new(4, fh)
-            hfg.Position = Vector2.new(bx, topScr.Y + barH - fh)
-            hfg.Color    = Color3.fromRGB(
-                math.floor(255*(1-ratio)),
-                math.floor(220*ratio), 30)
-            hfg.Visible  = true
+            local rat=math.clamp(hum.Health/math.max(hum.MaxHealth,1),0,1)
+            local bx2=cx-w/2-7
+            local bg=gd(p.UserId.."hbg","Square",{Filled=true,Thickness=0,Color=Color3.fromRGB(10,10,10)})
+            bg.Size=Vector2.new(4,h); bg.Position=Vector2.new(bx2,topS.Y); bg.Visible=true
+            local fg=gd(p.UserId.."hfg","Square",{Filled=true,Thickness=0})
+            local fh=h*rat
+            fg.Size=Vector2.new(4,fh); fg.Position=Vector2.new(bx2,topS.Y+h-fh)
+            fg.Color=Color3.fromRGB(math.floor(255*(1-rat)),math.floor(220*rat),30); fg.Visible=true
         end
-
-        -- ── DISTANCE
         if cfg.ESPDist then
-            local distD = getDrawing(p.UserId.."dist","Text",{
-                Size=11,Center=true,Outline=true,
-                OutlineColor=Color3.new(0,0,0),Font=2
-            })
-            distD.Text     = string.format("%.0f studs", depth)
-            distD.Color    = Color3.fromRGB(200,200,200)
-            distD.Position = Vector2.new(cx, botScr.Y + 4)
-            distD.Visible  = true
+            local dd=gd(p.UserId.."dt","Text",{Size=11,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Font=2})
+            dd.Text=string.format("%.0f st",dep); dd.Color=Color3.fromRGB(200,200,200)
+            dd.Position=Vector2.new(cx,botS.Y+4); dd.Visible=true
         end
-
-        -- ── SKELETON
         if cfg.ESPSkeleton then
-            for i, pair in ipairs(SKELETON_PAIRS) do
-                local pA = char:FindFirstChild(pair[1])
-                local pB = char:FindFirstChild(pair[2])
-                if pA and pB then
-                    local sA, _, vA = toScreen(pA.Position)
-                    local sB, _, vB = toScreen(pB.Position)
+            for i,pr in ipairs(SKEL) do
+                local a=c:FindFirstChild(pr[1]); local b=c:FindFirstChild(pr[2])
+                if a and b then
+                    local sA,_,vA=toScreen(a.Position); local sB,_,vB=toScreen(b.Position)
                     if vA and vB then
-                        local line = getDrawing(p.UserId.."sk"..i,"Line",{
-                            Thickness=1.1,Color=col
-                        })
-                        line.From    = sA
-                        line.To      = sB
-                        line.Color   = col
-                        line.Visible = true
+                        local ln=gd(p.UserId.."sk"..i,"Line",{Thickness=1.1,Color=col})
+                        ln.From=sA; ln.To=sB; ln.Color=col; ln.Visible=true
                     end
                 end
             end
@@ -328,72 +186,70 @@ local function drawESP()
     end
 end
 
--- ─── FOV CIRCLE ──────────────────────────────────────────────────────────────
-local fovDraw = Drawing.new("Circle")
-fovDraw.NumSides  = 64
-fovDraw.Thickness = 1.5
-fovDraw.Filled    = false
-fovDraw.Color     = Color3.fromRGB(255, 180, 0)
+-- ─── FOV CIRCLE ───────────────────────────────────────────────────────────────
+local fovC=Drawing.new("Circle")
+fovC.NumSides=64; fovC.Thickness=1.5
+fovC.Filled=false; fovC.Color=Color3.fromRGB(255,180,0)
 
--- ─── UI — BANANE SERVICE ─────────────────────────────────────────────────────
-local gui = Instance.new("ScreenGui")
-gui.Name           = "BananeService"
-gui.ResetOnSpawn   = false
-gui.IgnoreGuiInset = true
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent         = (cloneref or function(x) return x end)(game:GetService("CoreGui"))
+-- ─── UI ───────────────────────────────────────────────────────────────────────
+-- destroy old gui if reinjecting
+pcall(function()
+    game:GetService("CoreGui"):FindFirstChild("BananeService"):Destroy()
+end)
 
-local open = true
+local cg = (cloneref or function(x)return x end)(game:GetService("CoreGui"))
+local gui=Instance.new("ScreenGui",cg)
+gui.Name="BananeService"; gui.ResetOnSpawn=false
+gui.IgnoreGuiInset=true; gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
 
--- main window
-local win = Instance.new("Frame")
-win.Size             = UDim2.new(0,480,0,400)
-win.Position         = UDim2.new(0.5,-240,0.5,-200)
-win.BackgroundColor3 = Color3.fromRGB(14,10,4)
-win.BorderSizePixel  = 0
-win.ClipsDescendants = true
-win.Parent           = gui
+local GOLD   = Color3.fromRGB(255,175,0)
+local DARK   = Color3.fromRGB(14,10,4)
+local PANEL  = Color3.fromRGB(22,16,4)
+local PANELH = Color3.fromRGB(30,22,4)
+local BORDER = Color3.fromRGB(70,50,5)
+local TEXT   = Color3.fromRGB(210,195,165)
 
-Instance.new("UICorner",win).CornerRadius = UDim.new(0,8)
-local ws = Instance.new("UIStroke",win)
-ws.Color = Color3.fromRGB(200,140,0); ws.Thickness=2
+-- window  (fixed size, no AutomaticSize on root)
+local WIN_W,WIN_H = 480,420
+local win=Instance.new("Frame",gui)
+win.Size=UDim2.new(0,WIN_W,0,WIN_H)
+win.Position=UDim2.new(0.5,-WIN_W/2,0.5,-WIN_H/2)
+win.BackgroundColor3=DARK; win.BorderSizePixel=0
+win.ClipsDescendants=false
+Instance.new("UICorner",win).CornerRadius=UDim.new(0,8)
+local ws=Instance.new("UIStroke",win); ws.Color=Color3.fromRGB(200,140,0); ws.Thickness=2
 
--- title bar
-local tbar = Instance.new("Frame",win)
-tbar.Size             = UDim2.new(1,0,0,40)
-tbar.BackgroundColor3 = Color3.fromRGB(20,14,2)
-tbar.BorderSizePixel  = 0
+-- titlebar
+local tbar=Instance.new("Frame",win)
+tbar.Size=UDim2.new(1,0,0,38); tbar.Position=UDim2.new(0,0,0,0)
+tbar.BackgroundColor3=PANELH; tbar.BorderSizePixel=0
 Instance.new("UICorner",tbar).CornerRadius=UDim.new(0,8)
 
-local ttl = Instance.new("TextLabel",tbar)
-ttl.Size=UDim2.new(1,-40,1,0); ttl.Position=UDim2.new(0,12,0,0)
+local ttl=Instance.new("TextLabel",tbar)
+ttl.Size=UDim2.new(1,-40,1,0); ttl.Position=UDim2.new(0,10,0,0)
 ttl.BackgroundTransparency=1; ttl.Text="👑  BANANE SERVICE"
-ttl.TextColor3=Color3.fromRGB(255,180,0); ttl.TextSize=16
-ttl.Font=Enum.Font.GothamBold; ttl.TextXAlignment=Enum.TextXAlignment.Left
+ttl.TextColor3=GOLD; ttl.TextSize=15; ttl.Font=Enum.Font.GothamBold
+ttl.TextXAlignment=Enum.TextXAlignment.Left
 
--- close
-local xbtn = Instance.new("TextButton",tbar)
-xbtn.Size=UDim2.new(0,26,0,26); xbtn.Position=UDim2.new(1,-32,0.5,-13)
-xbtn.BackgroundColor3=Color3.fromRGB(160,30,30); xbtn.Text="✕"
-xbtn.TextColor3=Color3.new(1,1,1); xbtn.TextSize=13
+local xbtn=Instance.new("TextButton",tbar)
+xbtn.Size=UDim2.new(0,24,0,24); xbtn.Position=UDim2.new(1,-30,0.5,-12)
+xbtn.BackgroundColor3=Color3.fromRGB(150,25,25); xbtn.Text="✕"
+xbtn.TextColor3=Color3.new(1,1,1); xbtn.TextSize=12
 xbtn.Font=Enum.Font.GothamBold; xbtn.BorderSizePixel=0
 Instance.new("UICorner",xbtn).CornerRadius=UDim.new(0,5)
-xbtn.MouseButton1Click:Connect(function()
-    open=not open; win.Visible=open
-end)
+local menuOpen=true
+xbtn.MouseButton1Click:Connect(function() menuOpen=not menuOpen; win.Visible=menuOpen end)
 
 -- drag
 do
-    local drag,ds,dp=false
+    local drag,ds,dp=false,nil,nil
     tbar.InputBegan:Connect(function(i)
-        if i.UserInputType==Enum.UserInputType.MouseButton1 then
-            drag=true; ds=i.Position; dp=win.Position
-        end
+        if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true;ds=i.Position;dp=win.Position end
     end)
     tbar.InputEnded:Connect(function(i)
         if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end
     end)
-    tbar.InputChanged:Connect(function(i)
+    UserInputService.InputChanged:Connect(function(i)
         if drag and i.UserInputType==Enum.UserInputType.MouseMovement then
             local d=i.Position-ds
             win.Position=UDim2.new(dp.X.Scale,dp.X.Offset+d.X,dp.Y.Scale,dp.Y.Offset+d.Y)
@@ -401,60 +257,49 @@ do
     end)
 end
 
--- content scroll
-local content = Instance.new("ScrollingFrame",win)
-content.Size=UDim2.new(1,0,1,-44); content.Position=UDim2.new(0,0,0,44)
-content.BackgroundTransparency=1; content.BorderSizePixel=0
-content.ScrollBarThickness=3; content.CanvasSize=UDim2.new(0,0,0,0)
-content.ScrollBarImageColor3=Color3.fromRGB(200,140,0)
-content.AutomaticCanvasSize=Enum.AutomaticSize.Y
+-- content area  (fixed, no scrolling needed at this size)
+local CONTENT_Y = 42  -- below titlebar
+local COL_W     = 220
+local COL_PAD   = 8
 
-local grid = Instance.new("Frame",content)
-grid.Size=UDim2.new(1,-16,0,0); grid.Position=UDim2.new(0,8,0,8)
-grid.BackgroundTransparency=1; grid.AutomaticSize=Enum.AutomaticSize.Y
-local gl=Instance.new("UIGridLayout",grid)
-gl.CellSize=UDim2.new(0.5,-6,0,0); gl.CellPadding=UDim2.new(0,6,0,6)
-gl.SortOrder=Enum.SortOrder.LayoutOrder; gl.FillDirectionMaxCells=2
--- auto height cells
-Instance.new("UITableLayout",grid)  -- fallback; actual layout via grid
-
--- ── panel factory
-local function panel(title, icon)
-    local f = Instance.new("Frame",content)
-    f.Size=UDim2.new(0.5,-14,0,0); f.AutomaticSize=Enum.AutomaticSize.Y
-    f.BackgroundColor3=Color3.fromRGB(22,16,4); f.BorderSizePixel=0
+-- ── panel builder (absolute position, fixed height)
+local function mkPanel(parent, title, icon, x, y, w, h)
+    local f=Instance.new("Frame",parent)
+    f.Size=UDim2.new(0,w,0,h); f.Position=UDim2.new(0,x,0,y)
+    f.BackgroundColor3=PANEL; f.BorderSizePixel=0
     Instance.new("UICorner",f).CornerRadius=UDim.new(0,6)
-    local fs=Instance.new("UIStroke",f); fs.Color=Color3.fromRGB(70,50,5); fs.Thickness=1
+    local fs=Instance.new("UIStroke",f); fs.Color=BORDER; fs.Thickness=1
     local hdr=Instance.new("Frame",f)
-    hdr.Size=UDim2.new(1,0,0,24); hdr.BackgroundColor3=Color3.fromRGB(30,22,4)
-    hdr.BorderSizePixel=0; Instance.new("UICorner",hdr).CornerRadius=UDim.new(0,6)
+    hdr.Size=UDim2.new(1,0,0,24); hdr.BackgroundColor3=PANELH; hdr.BorderSizePixel=0
+    Instance.new("UICorner",hdr).CornerRadius=UDim.new(0,6)
     local ht=Instance.new("TextLabel",hdr)
     ht.Size=UDim2.new(1,-8,1,0); ht.Position=UDim2.new(0,8,0,0)
     ht.BackgroundTransparency=1; ht.Text=icon.."  "..title
-    ht.TextColor3=Color3.fromRGB(255,180,0); ht.TextSize=11
-    ht.Font=Enum.Font.GothamBold; ht.TextXAlignment=Enum.TextXAlignment.Left
+    ht.TextColor3=GOLD; ht.TextSize=11; ht.Font=Enum.Font.GothamBold
+    ht.TextXAlignment=Enum.TextXAlignment.Left
+    -- body list
     local body=Instance.new("Frame",f)
-    body.Size=UDim2.new(1,-10,0,0); body.Position=UDim2.new(0,5,0,28)
-    body.BackgroundTransparency=1; body.AutomaticSize=Enum.AutomaticSize.Y
+    body.Size=UDim2.new(1,-10,1,-28); body.Position=UDim2.new(0,5,0,27)
+    body.BackgroundTransparency=1
     local bl=Instance.new("UIListLayout",body)
-    bl.Padding=UDim.new(0,5); bl.SortOrder=Enum.SortOrder.LayoutOrder
+    bl.Padding=UDim.new(0,4); bl.SortOrder=Enum.SortOrder.LayoutOrder
+    bl.VerticalAlignment=Enum.VerticalAlignment.Top
     return body
 end
 
--- ── toggle factory
-local function toggle(parent, label, key, order)
+-- ── toggle row
+local function mkToggle(parent, label, key, order)
     local row=Instance.new("Frame",parent)
     row.Size=UDim2.new(1,0,0,22); row.BackgroundTransparency=1; row.LayoutOrder=order
 
     local lbl=Instance.new("TextLabel",row)
-    lbl.Size=UDim2.new(1,-42,1,0); lbl.BackgroundTransparency=1
-    lbl.Text=label; lbl.TextColor3=Color3.fromRGB(210,195,165)
-    lbl.TextSize=11; lbl.Font=Enum.Font.Gotham
+    lbl.Size=UDim2.new(1,-40,1,0); lbl.BackgroundTransparency=1
+    lbl.Text=label; lbl.TextColor3=TEXT; lbl.TextSize=11; lbl.Font=Enum.Font.Gotham
     lbl.TextXAlignment=Enum.TextXAlignment.Left
 
     local bg=Instance.new("Frame",row)
     bg.Size=UDim2.new(0,34,0,17); bg.Position=UDim2.new(1,-36,0.5,-8.5)
-    bg.BackgroundColor3=cfg[key] and Color3.fromRGB(255,160,0) or Color3.fromRGB(45,45,45)
+    bg.BackgroundColor3=cfg[key] and GOLD or Color3.fromRGB(45,45,45)
     bg.BorderSizePixel=0; Instance.new("UICorner",bg).CornerRadius=UDim.new(1,0)
 
     local knob=Instance.new("Frame",bg)
@@ -465,33 +310,33 @@ local function toggle(parent, label, key, order)
 
     local btn=Instance.new("TextButton",row)
     btn.Size=UDim2.new(1,0,1,0); btn.BackgroundTransparency=1; btn.Text=""
+    btn.ZIndex=2
     btn.MouseButton1Click:Connect(function()
         cfg[key]=not cfg[key]
         local on=cfg[key]
-        bg.BackgroundColor3=on and Color3.fromRGB(255,160,0) or Color3.fromRGB(45,45,45)
+        bg.BackgroundColor3=on and GOLD or Color3.fromRGB(45,45,45)
         TweenService:Create(knob,TweenInfo.new(0.1),{
             Position=on and UDim2.new(1,-15,0.5,-6.5) or UDim2.new(0,2,0.5,-6.5)
         }):Play()
     end)
 end
 
--- ── slider factory
-local function slider(parent, label, key, mn, mx, fmt, order)
+-- ── slider row
+local function mkSlider(parent, label, key, mn, mx, fmt, order)
+    local fmt2=fmt or "%.0f"
     local row=Instance.new("Frame",parent)
     row.Size=UDim2.new(1,0,0,34); row.BackgroundTransparency=1; row.LayoutOrder=order
 
     local lbl=Instance.new("TextLabel",row)
     lbl.Size=UDim2.new(1,-44,0,14); lbl.BackgroundTransparency=1
-    lbl.Text=label; lbl.TextColor3=Color3.fromRGB(210,195,165)
-    lbl.TextSize=10; lbl.Font=Enum.Font.Gotham
+    lbl.Text=label; lbl.TextColor3=TEXT; lbl.TextSize=10; lbl.Font=Enum.Font.Gotham
     lbl.TextXAlignment=Enum.TextXAlignment.Left
 
-    local fmt2 = fmt or "%.0f"
     local vl=Instance.new("TextLabel",row)
     vl.Size=UDim2.new(0,42,0,14); vl.Position=UDim2.new(1,-44,0,0)
     vl.BackgroundTransparency=1; vl.Text=string.format(fmt2,cfg[key])
-    vl.TextColor3=Color3.fromRGB(255,160,0); vl.TextSize=10
-    vl.Font=Enum.Font.GothamBold; vl.TextXAlignment=Enum.TextXAlignment.Right
+    vl.TextColor3=GOLD; vl.TextSize=10; vl.Font=Enum.Font.GothamBold
+    vl.TextXAlignment=Enum.TextXAlignment.Right
 
     local track=Instance.new("Frame",row)
     track.Size=UDim2.new(1,0,0,5); track.Position=UDim2.new(0,0,0,17)
@@ -500,155 +345,91 @@ local function slider(parent, label, key, mn, mx, fmt, order)
 
     local ratio=(cfg[key]-mn)/(mx-mn)
     local fill=Instance.new("Frame",track)
-    fill.Size=UDim2.new(ratio,0,1,0)
-    fill.BackgroundColor3=Color3.fromRGB(255,160,0)
-    fill.BorderSizePixel=0
-    Instance.new("UICorner",fill).CornerRadius=UDim.new(1,0)
+    fill.Size=UDim2.new(ratio,0,1,0); fill.BackgroundColor3=GOLD
+    fill.BorderSizePixel=0; Instance.new("UICorner",fill).CornerRadius=UDim.new(1,0)
 
     local sliding=false
     local hit=Instance.new("TextButton",row)
-    hit.Size=UDim2.new(1,0,0,20); hit.Position=UDim2.new(0,0,0,12)
-    hit.BackgroundTransparency=1; hit.Text=""
+    hit.Size=UDim2.new(1,0,0,22); hit.Position=UDim2.new(0,0,0,12)
+    hit.BackgroundTransparency=1; hit.Text=""; hit.ZIndex=2
 
     local function upd(ix)
-        local ax=track.AbsolutePosition.X
-        local aw=track.AbsoluteSize.X
-        local r=math.clamp((ix-ax)/aw,0,1)
-        local v
-        if fmt and fmt:find("%.") then
-            local dec=tonumber(fmt:match("%.(%d)")) or 2
-            local mul=10^dec
-            v=math.floor((mn+r*(mx-mn))*mul+0.5)/mul
-        else
-            v=math.floor(mn+r*(mx-mn)+0.5)
-        end
-        cfg[key]=v
-        fill.Size=UDim2.new(r,0,1,0)
-        vl.Text=string.format(fmt2,v)
+        local r=math.clamp((ix-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+        local dec=tonumber((fmt2:match("%.(%d)"))) or 0
+        local mul=10^dec
+        local v=math.floor((mn+r*(mx-mn))*mul+0.5)/mul
+        cfg[key]=v; fill.Size=UDim2.new(r,0,1,0); vl.Text=string.format(fmt2,v)
     end
 
     hit.InputBegan:Connect(function(i)
-        if i.UserInputType==Enum.UserInputType.MouseButton1 then
-            sliding=true; upd(i.Position.X)
-        end
+        if i.UserInputType==Enum.UserInputType.MouseButton1 then sliding=true; upd(i.Position.X) end
     end)
     hit.InputEnded:Connect(function(i)
         if i.UserInputType==Enum.UserInputType.MouseButton1 then sliding=false end
     end)
     UserInputService.InputChanged:Connect(function(i)
-        if sliding and i.UserInputType==Enum.UserInputType.MouseMovement then
-            upd(i.Position.X)
-        end
+        if sliding and i.UserInputType==Enum.UserInputType.MouseMovement then upd(i.Position.X) end
     end)
 end
 
--- ─── BUILD UI LAYOUT ─────────────────────────────────────────────────────────
--- two-column layout via separate frame
-local cols = Instance.new("Frame",content)
-cols.Size=UDim2.new(1,-16,0,0); cols.Position=UDim2.new(0,8,0,8)
-cols.BackgroundTransparency=1; cols.AutomaticSize=Enum.AutomaticSize.Y
-local cl=Instance.new("UIGridLayout",cols)
-cl.CellSize=UDim2.new(0.5,-5,0,1); cl.CellPadding=UDim2.new(0,8,0,6)
-cl.FillDirection=Enum.FillDirection.Horizontal
-cl.AutomaticCellSize=true
+-- ─── LAYOUT  (absolute, no AutomaticSize chains) ──────────────────────────────
+--
+--  Left col  x=8                Right col  x=8+220+8=236
+--
+--  [AIM ASSIST   220x185]       [TRIGGER BOT  220x90 ]
+--  [ESP          220x175]       [MISC         220x90 ]
 
--- replace with simple side-by-side frames
-cols:Destroy()
+local L=COL_PAD
+local R=COL_PAD+COL_W+COL_PAD  -- 236
+local T=CONTENT_Y+4
 
-local function col(parent,xoff)
-    local f=Instance.new("Frame",parent)
-    f.Size=UDim2.new(0.5,-12,0,0); f.Position=UDim2.new(xoff,xoff==0 and 8 or -4,0,8)
-    f.BackgroundTransparency=1; f.AutomaticSize=Enum.AutomaticSize.Y
-    local l=Instance.new("UIListLayout",f)
-    l.Padding=UDim.new(0,8); l.SortOrder=Enum.SortOrder.LayoutOrder
-    return f
-end
+-- AIM panel  (6 rows: 4 toggles + 2 sliders = 4*22 + 2*34 + paddings)
+local aimB=mkPanel(win,"AIM ASSIST","⊕",L,T,COL_W,190)
+mkToggle(aimB,"Aimbot",      "Aimbot",1)
+mkToggle(aimB,"Silent Aim",  "SilentAim",2)
+mkToggle(aimB,"Team Check",  "TeamCheck",3)
+mkToggle(aimB,"Show FOV",    "ShowFOV",4)
+mkSlider(aimB,"FOV Radius",  "FOV",50,400,"%.0f",5)
+mkSlider(aimB,"Smoothing",   "AimSmooth",0.01,0.99,"%.2f",6)
 
-local left  = col(content, 0)
-local right = col(content, 0.5)
+-- ESP panel
+local espB=mkPanel(win,"ESP","👁",L,T+198,COL_W,168)
+mkToggle(espB,"Enable",   "ESP",1)
+mkToggle(espB,"Boxes",    "ESPBox",2)
+mkToggle(espB,"Skeleton", "ESPSkeleton",3)
+mkToggle(espB,"Names",    "ESPName",4)
+mkToggle(espB,"Health",   "ESPHealth",5)
+mkToggle(espB,"Distance", "ESPDist",6)
 
--- helper: panel in a column
-local function cpanel(parent, title, icon)
-    local f=Instance.new("Frame",parent)
-    f.Size=UDim2.new(1,0,0,0); f.AutomaticSize=Enum.AutomaticSize.Y
-    f.BackgroundColor3=Color3.fromRGB(22,16,4); f.BorderSizePixel=0
-    Instance.new("UICorner",f).CornerRadius=UDim.new(0,6)
-    local fs=Instance.new("UIStroke",f); fs.Color=Color3.fromRGB(70,50,5); fs.Thickness=1
-    local hdr=Instance.new("Frame",f)
-    hdr.Size=UDim2.new(1,0,0,24); hdr.BackgroundColor3=Color3.fromRGB(30,22,4)
-    hdr.BorderSizePixel=0; Instance.new("UICorner",hdr).CornerRadius=UDim.new(0,6)
-    local ht=Instance.new("TextLabel",hdr)
-    ht.Size=UDim2.new(1,-8,1,0); ht.Position=UDim2.new(0,8,0,0)
-    ht.BackgroundTransparency=1; ht.Text=icon.."  "..title
-    ht.TextColor3=Color3.fromRGB(255,180,0); ht.TextSize=11
-    ht.Font=Enum.Font.GothamBold; ht.TextXAlignment=Enum.TextXAlignment.Left
-    local body=Instance.new("Frame",f)
-    body.Size=UDim2.new(1,-10,0,0); body.Position=UDim2.new(0,5,0,28)
-    body.BackgroundTransparency=1; body.AutomaticSize=Enum.AutomaticSize.Y
-    local bl=Instance.new("UIListLayout",body)
-    bl.Padding=UDim.new(0,5); bl.SortOrder=Enum.SortOrder.LayoutOrder
-    local pad=Instance.new("UIPadding",body)
-    pad.PaddingBottom=UDim.new(0,6)
-    return body
-end
+-- TRIGGER BOT panel
+local trigB=mkPanel(win,"TRIGGER BOT","⚡",R,T,COL_W,92)
+mkToggle(trigB,"Enable",       "TriggerBot",1)
+mkSlider(trigB,"Delay (s)",    "TriggerDelay",0.01,0.5,"%.2f",2)
 
--- LEFT col
-local aimP = cpanel(left,"AIM ASSIST","⊕")
-toggle(aimP,"Aimbot",           "Aimbot",1)
-toggle(aimP,"Silent Aim",       "SilentAim",2)
-toggle(aimP,"Show FOV Circle",  "ShowFOV",3)
-toggle(aimP,"Team Check",       "TeamCheck",4)
-slider(aimP,"FOV Radius",       "FOV",50,400,"%.0f",5)
-slider(aimP,"Smoothing",        "AimSmooth",0.01,0.99,"%.2f",6)
+-- MISC panel
+local miscB=mkPanel(win,"MISC","⚙",R,T+100,COL_W,92)
+mkToggle(miscB,"Aimbot on RMB","Aimbot",1)
+mkToggle(miscB,"Silent Aim",   "SilentAim",2)
+mkToggle(miscB,"Show FOV",     "ShowFOV",3)
 
-local espP = cpanel(left,"ESP","👁")
-toggle(espP,"Enable",    "ESP",1)
-toggle(espP,"Boxes",     "ESPBox",2)
-toggle(espP,"Skeleton",  "ESPSkeleton",3)
-toggle(espP,"Names",     "ESPName",4)
-toggle(espP,"Health",    "ESPHealth",5)
-toggle(espP,"Distance",  "ESPDist",6)
-
--- RIGHT col
-local trigP = cpanel(right,"TRIGGER BOT","⚡")
-toggle(trigP,"Trigger Bot",  "TriggerBot",1)
-slider(trigP,"Delay (s)",    "TriggerDelay",0.01,0.5,"%.2f",2)
-
-local miscP = cpanel(right,"MISC","⚙")
-toggle(miscP,"Show FOV Circle","ShowFOV",1)
-
--- ─── INSERT HOTKEY ────────────────────────────────────────────────────────────
+-- INSERT toggle
 UserInputService.InputBegan:Connect(function(i,gpe)
     if gpe then return end
-    if i.KeyCode==Enum.KeyCode.Insert then
-        open=not open; win.Visible=open
-    end
+    if i.KeyCode==Enum.KeyCode.Insert then menuOpen=not menuOpen; win.Visible=menuOpen end
 end)
 
 -- ─── MAIN LOOP ────────────────────────────────────────────────────────────────
 initSilentAim()
 
 RunService.RenderStepped:Connect(function()
-    -- update viewport size
-    sw = cam.ViewportSize.X
-    sh = cam.ViewportSize.Y
-
-    -- best target (shared across features)
-    currentTarget = getBest()
-
-    -- aimbot
+    sw=cam.ViewportSize.X; sh=cam.ViewportSize.Y
+    currentTarget=getBest()
     doAimbot()
-
-    -- triggerbot
     doTriggerBot()
-
-    -- ESP
     drawESP()
-
-    -- FOV circle
-    fovDraw.Position = Vector2.new(sw/2, sh/2)
-    fovDraw.Radius   = cfg.FOV
-    fovDraw.Visible  = cfg.ShowFOV
+    fovC.Position=Vector2.new(sw/2,sh/2)
+    fovC.Radius=cfg.FOV
+    fovC.Visible=cfg.ShowFOV
 end)
 
-print("[BananeService] loaded — INSERT = menu")
+print("[BananeService v3] loaded — INSERT toggle menu")
