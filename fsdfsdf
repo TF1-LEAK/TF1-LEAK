@@ -1,0 +1,235 @@
+-- zaml.lua | Kontra | v3 minified — tient sous 260 lignes, zero troncature
+local Pl=game:GetService("Players")
+local RS=game:GetService("RunService")
+local UI=game:GetService("UserInputService")
+local lp=Pl.LocalPlayer
+local cam=workspace.CurrentCamera
+local Li=game:GetService("Lighting")
+
+local hD=pcall(function()return Drawing~=nil and Drawing.new end)
+local function nL() if hD then local l=Drawing.new("Line") l.Visible=false l.Thickness=1 l.Color=Color3.new(1,1,1) return l end return{Visible=false,From=Vector2.zero,To=Vector2.zero,Color=Color3.new(1,1,1),Thickness=1} end
+local function nC() if hD then local c=Drawing.new("Circle") c.Visible=false c.Thickness=1 c.Filled=false c.NumSides=64 return c end return{Visible=false,Radius=0,Position=Vector2.zero,Color=Color3.new(1,1,1),Thickness=1,Filled=false,NumSides=64} end
+local function nS() if hD then local s=Drawing.new("Square") s.Visible=false s.Thickness=1 s.Filled=false return s end return{Visible=false,Size=Vector2.zero,Position=Vector2.zero,Color=Color3.new(1,1,1),Thickness=1,Filled=false} end
+local function nT() if hD then local t=Drawing.new("Text") t.Visible=false t.Size=13 t.Color=Color3.new(1,1,1) t.Center=true return t end return{Visible=false,Text="",Size=13,Color=Color3.new(1,1,1),Center=true,Position=Vector2.zero} end
+
+local c={
+    sa=false,fr=120,sfc=true,fc=Color3.fromRGB(255,255,255),ap="Head",wc=true,tc=true,
+    tb=false,td=0,nr=false,ns=false,
+    aa=false,aw="While",af=80,as=35,omm=false,tca=false,asp=14,asm=50,
+    esp=false,ec=Color3.fromRGB(255,60,60),vc=Color3.fromRGB(0,255,80),vcc=false,
+    st=false,mc=Color3.fromRGB(60,120,255),md=3000,
+    ch=false,cft=60,bx=false,bf=false,hb=false,nm=true,dt=true,ts=12,
+    sl=false,oa=false,ar=220,
+    hm=false,hmc=Color3.fromRGB(255,255,255),kmc=Color3.fromRGB(255,40,40),
+    hmt=0.45,hms=10,hmth=2,hmg=4,kms=1.4,
+    hs=false,hsid="rbxassetid://6607",hv=60,ks=false,ksid="rbxassetid://5043",
+    ab=false,sas=false,ft=true,at=8,
+    fb=false,nm2=false,ns2=0.6,ftm=false,tv=12,
+    bl=true,bi=1,bs=24,bt=2,rge=false,stw=false,wt=50,
+    nsp=false,fn="",kl=true,hl=true,shk=Enum.KeyCode.K,
+}
+
+local function gC(p) return p and p.Character end
+local function gR(p) local ch=gC(p) return ch and ch:FindFirstChild("HumanoidRootPart") end
+local function gH(p) local ch=gC(p) return ch and ch:FindFirstChildOfClass("Humanoid") end
+local function gHd(p) local ch=gC(p) return ch and ch:FindFirstChild("Head") end
+local function gP(p,n) local ch=gC(p) if not ch then return nil end return ch:FindFirstChild(n) or ch:FindFirstChild("Head") end
+local function alive(p) local h=gH(p) return h and h.Health>0 end
+local function enemy(p) if not c.tc then return true end return p.Team~=lp.Team end
+local function w2s(pos) local s,v=cam:WorldToViewportPoint(pos) return Vector2.new(s.X,s.Y),v end
+local function los(o,part)
+    local hit=workspace:FindPartOnRayWithIgnoreList(Ray.new(o,part.Position-o),{gC(lp)})
+    if not hit then return true end return Pl:GetPlayerFromCharacter(hit.Parent)~=nil
+end
+local function targets()
+    local out={}
+    for _,p in ipairs(Pl:GetPlayers()) do
+        if p~=lp and alive(p) and enemy(p) then
+            local r=gR(p)
+            if r and(r.Position-cam.CFrame.Position).Magnitude<=c.md then table.insert(out,p) end
+        end
+    end
+    return out
+end
+local function best(ts,fov)
+    local bt,bd=nil,fov
+    local ctr=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    for _,p in ipairs(ts) do
+        local pt=gP(p,c.ap)
+        if pt then local s2,vis=w2s(pt.Position)
+            if vis then local d=(s2-ctr).Magnitude
+                if d<bd then
+                    if not c.wc or los(cam.CFrame.Position,pt) then bt,bd=p,d end
+                end
+            end
+        end
+    end
+    return bt
+end
+
+-- aim
+local function doSA() if not c.sa then return end local b=best(targets(),c.fr) if not b then return end local pt=gP(b,c.ap) if not pt then return end local o=cam.CFrame.Position cam.CFrame=CFrame.new(o,pt.Position) end
+local function doAA()
+    if not c.aa then return end
+    if c.aw=="While" and not UI:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
+    local b=best(targets(),c.af) if not b then return end
+    local pt=gP(b,c.ap) if not pt then return end
+    if c.wc and not los(cam.CFrame.Position,pt) then return end
+    local o=cam.CFrame.Position local cur=cam.CFrame.LookVector
+    local des=(pt.Position-o).Unit local t=math.clamp((c.as/100)/math.max(1,c.asm*0.1),0,1)
+    cam.CFrame=CFrame.new(o,o+cur:Lerp(des,t))
+end
+local ltrig=0
+local function doTB()
+    if not c.tb then return end if tick()-ltrig<c.td/1000 then return end
+    local ctr=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    for _,p in ipairs(targets()) do local pt=gP(p,c.ap) if pt then local s2,vis=w2s(pt.Position)
+        if vis and(s2-ctr).Magnitude<10 then
+            pcall(function() if mouse1click then mouse1click() else local vi=game:GetService("VirtualInputManager") vi:SendMouseButtonEvent(0,0,0,true,game,0) task.wait(0.05) vi:SendMouseButtonEvent(0,0,0,false,game,0) end end)
+            ltrig=tick() return
+        end
+    end end
+end
+
+UI.JumpRequest:Connect(function() if not c.ab then return end local h=gH(lp) if h and h.FloorMaterial==Enum.Material.Air then h.Jump=false end end)
+
+local lCF=CFrame.new()
+RunService.RenderStepped:Connect(function()
+    if c.nr then local cur=cam.CFrame local _,ry,_=cur:ToEulerAnglesYXZ() local _,lry,_=lCF:ToEulerAnglesYXZ() if math.abs(ry-lry)>0.008 then cam.CFrame=lCF:Lerp(cur,0.3) end end
+    lCF=cam.CFrame
+end)
+
+-- chams
+local co={}
+local function aCh(p) local ch=gC(p) if not ch then return end for _,pt in ipairs(ch:GetDescendants()) do if pt:IsA("BasePart") and pt.Name~="HumanoidRootPart" then if not co[pt] then co[pt]={col=pt.Color,tr=pt.Transparency,mat=pt.Material} end pt.Color=enemy(p) and c.ec or c.mc pt.Transparency=(100-c.cft)/100 pt.Material=Enum.Material.Neon end end end
+local function rCh(p) local ch=gC(p) if not ch then return end for _,pt in ipairs(ch:GetDescendants()) do if co[pt] then pt.Color=co[pt].col pt.Transparency=co[pt].tr pt.Material=co[pt].mat co[pt]=nil end end end
+
+-- world
+local function doW()
+    if c.fb then Li.Brightness=10 Li.ClockTime=14 Li.FogEnd=1e6 Li.GlobalShadows=false Li.Ambient=Color3.fromRGB(178,178,178) Li.OutdoorAmbient=Color3.fromRGB(178,178,178) end
+    if c.nm2 and not c.fb then Li.ClockTime=0 Li.Brightness=c.ns2 end
+    if c.ftm and not c.fb and not c.nm2 then Li.ClockTime=c.tv end
+    local bl=Li:FindFirstChildOfClass("BloomEffect") or Instance.new("BloomEffect",Li)
+    bl.Enabled=c.bl bl.Intensity=c.bi bl.Size=c.bs bl.Threshold=c.bt
+    if c.rge then for _,v in ipairs(Li:GetChildren()) do if v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect") then v.Enabled=false end end end
+end
+
+-- esp pool
+local pool={}
+local function gO(p) if not pool[p] then pool[p]={box=nS(),name=nT(),hBG=nS(),hBar=nS(),dist=nT(),snap=nL(),arr=nT()} end return pool[p] end
+local function hO(p) if pool[p] then for _,v in pairs(pool[p]) do v.Visible=false end end end
+
+local function doESP()
+    if not c.esp then for p in pairs(pool) do hO(p) end return end
+    local vp=cam.ViewportSize local ctr=Vector2.new(vp.X/2,vp.Y/2)
+    for _,p in ipairs(Pl:GetPlayers()) do
+        if p==lp then goto ct end
+        if not alive(p) or(not enemy(p) and not c.st) then hO(p) goto ct end
+        local obj=gO(p) local root=gR(p) local head=gHd(p)
+        if not root or not head then hO(p) goto ct end
+        local rs,rv=w2s(root.Position) local hs,_=w2s(head.Position+Vector3.new(0,0.7,0))
+        if not rv then hO(p) goto ct end
+        local col=c.ec if c.vcc and los(cam.CFrame.Position,head) then col=c.vc end if not enemy(p) then col=c.mc end
+        local dist=math.floor((root.Position-cam.CFrame.Position).Magnitude)
+        local bH=math.max(10,math.abs(hs.Y-rs.Y)*1.8) local bW=bH*0.55
+        if c.bx then obj.box.Visible=true obj.box.Color=col obj.box.Thickness=1 obj.box.Filled=c.bf obj.box.Size=Vector2.new(bW,bH) obj.box.Position=Vector2.new(rs.X-bW/2,rs.Y-bH) else obj.box.Visible=false end
+        if c.nm then obj.name.Visible=true obj.name.Text=p.DisplayName obj.name.Size=c.ts obj.name.Color=col obj.name.Center=true obj.name.Position=Vector2.new(rs.X,hs.Y-c.ts-2) else obj.name.Visible=false end
+        if c.dt then obj.dist.Visible=true obj.dist.Text=dist.."m" obj.dist.Size=c.ts-1 obj.dist.Color=Color3.fromRGB(200,200,200) obj.dist.Center=true obj.dist.Position=Vector2.new(rs.X,rs.Y+2) else obj.dist.Visible=false end
+        if c.hb then local hum=gH(p) local hp=hum and math.clamp(hum.Health/hum.MaxHealth,0,1) or 1 local barH=bH*hp obj.hBG.Visible=true obj.hBG.Filled=true obj.hBG.Size=Vector2.new(4,bH) obj.hBG.Color=Color3.fromRGB(40,40,40) obj.hBG.Position=Vector2.new(rs.X-bW/2-6,rs.Y-bH) obj.hBar.Visible=true obj.hBar.Filled=true obj.hBar.Size=Vector2.new(4,barH) obj.hBar.Position=Vector2.new(rs.X-bW/2-6,rs.Y-barH) obj.hBar.Color=Color3.fromRGB(math.floor(255*(1-hp)),math.floor(255*hp),40) else obj.hBar.Visible=false obj.hBG.Visible=false end
+        if c.sl then local orig=Vector2.new(ctr.X,vp.Y) obj.snap.Visible=true obj.snap.From=orig obj.snap.To=rs obj.snap.Color=col obj.snap.Thickness=1 else obj.snap.Visible=false end
+        ::ct::
+    end
+end
+
+-- hit marker
+local hl={nL(),nL(),nL(),nL()} local ht=0
+local function sHit(kill)
+    if not c.hm then return end
+    local ctr=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    local g,s=c.hmg,c.hms local col=kill and c.kmc or c.hmc local sc=kill and c.kms or 1
+    local pts={{Vector2.new(-g,-g),Vector2.new(-g-s,-g-s)},{Vector2.new(g,g),Vector2.new(g+s,g+s)},{Vector2.new(g,-g),Vector2.new(g+s,-g-s)},{Vector2.new(-g,g),Vector2.new(-g-s,g+s)}}
+    for i,pair in ipairs(pts) do hl[i].From=ctr+pair[1]*sc hl[i].To=ctr+pair[2]*sc hl[i].Color=col hl[i].Thickness=c.hmth hl[i].Visible=true end
+    ht=tick()
+end
+
+local fC=nC() local aC=nC()
+
+-- GUI
+local D={bg=Color3.fromRGB(18,18,28),pan=Color3.fromRGB(24,24,38),acc=Color3.fromRGB(110,80,220),tx=Color3.fromRGB(210,210,220),sub=Color3.fromRGB(130,130,150),ton=Color3.fromRGB(110,80,220),tof=Color3.fromRGB(50,50,70),slb=Color3.fromRGB(40,40,60)}
+local gui=Instance.new("ScreenGui") gui.Name="zaml" gui.ResetOnSpawn=false gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling gui.IgnoreGuiInset=true
+if not pcall(function() gui.Parent=game:GetService("CoreGui") end) then gui.Parent=lp.PlayerGui end
+local uv=true
+local mf=Instance.new("Frame",gui) mf.Size=UDim2.new(0,860,0,500) mf.Position=UDim2.new(0.5,-430,0.5,-250) mf.BackgroundColor3=D.bg mf.BorderSizePixel=0 mf.Active=true mf.Draggable=true Instance.new("UICorner",mf).CornerRadius=UDim.new(0,6) local st=Instance.new("UIStroke",mf) st.Color=D.acc st.Thickness=1.2
+local tb=Instance.new("Frame",mf) tb.Size=UDim2.new(1,0,0,34) tb.BackgroundColor3=D.pan tb.BorderSizePixel=0 Instance.new("UICorner",tb).CornerRadius=UDim.new(0,6)
+local tl=Instance.new("TextLabel",tb) tl.Size=UDim2.new(0,80,1,0) tl.Position=UDim2.new(0,10,0,0) tl.BackgroundTransparency=1 tl.Text="zaml" tl.TextColor3=D.tx tl.Font=Enum.Font.GothamBold tl.TextSize=15
+local sl=Instance.new("TextLabel",tb) sl.Size=UDim2.new(0,60,1,0) sl.Position=UDim2.new(0,50,0,0) sl.BackgroundTransparency=1 sl.Text="by amaz" sl.TextColor3=D.sub sl.Font=Enum.Font.Gotham sl.TextSize=11
+local sd=Instance.new("Frame",mf) sd.Size=UDim2.new(0,120,1,-34) sd.Position=UDim2.new(0,0,0,34) sd.BackgroundColor3=D.pan sd.BorderSizePixel=0
+local ct=Instance.new("Frame",mf) ct.Size=UDim2.new(1,-120,1,-34) ct.Position=UDim2.new(0,120,0,34) ct.BackgroundColor3=D.bg ct.BorderSizePixel=0 ct.ClipsDescendants=true
+
+local function sec(par,y,txt) local f=Instance.new("Frame",par) f.Size=UDim2.new(1,0,0,20) f.Position=UDim2.new(0,0,0,y) f.BackgroundTransparency=1 local l=Instance.new("TextLabel",f) l.Size=UDim2.new(1,-12,1,0) l.Position=UDim2.new(0,12,0,0) l.BackgroundTransparency=1 l.Text=txt l.TextColor3=D.sub l.Font=Enum.Font.GothamBold l.TextSize=10 l.TextXAlignment=Enum.TextXAlignment.Left return 22 end
+local function tog(par,y,lbl,get,set) local row=Instance.new("Frame",par) row.Size=UDim2.new(1,0,0,26) row.Position=UDim2.new(0,0,0,y) row.BackgroundTransparency=1 local lb=Instance.new("TextLabel",row) lb.Size=UDim2.new(1,-52,1,0) lb.Position=UDim2.new(0,12,0,0) lb.BackgroundTransparency=1 lb.Text=lbl lb.TextColor3=D.tx lb.Font=Enum.Font.Gotham lb.TextSize=12 lb.TextXAlignment=Enum.TextXAlignment.Left local tr=Instance.new("Frame",row) tr.Size=UDim2.new(0,34,0,16) tr.Position=UDim2.new(1,-44,0.5,-8) tr.BackgroundColor3=get() and D.ton or D.tof tr.BorderSizePixel=0 Instance.new("UICorner",tr).CornerRadius=UDim.new(1,0) local kn=Instance.new("Frame",tr) kn.Size=UDim2.new(0,12,0,12) kn.Position=get() and UDim2.new(1,-14,0.5,-6) or UDim2.new(0,2,0.5,-6) kn.BackgroundColor3=Color3.new(1,1,1) kn.BorderSizePixel=0 Instance.new("UICorner",kn).CornerRadius=UDim.new(1,0) local btn=Instance.new("TextButton",row) btn.Size=UDim2.new(1,0,1,0) btn.BackgroundTransparency=1 btn.Text="" btn.MouseButton1Click:Connect(function() set(not get()) tr.BackgroundColor3=get() and D.ton or D.tof kn.Position=get() and UDim2.new(1,-14,0.5,-6) or UDim2.new(0,2,0.5,-6) end) return 28 end
+local function sld(par,y,lbl,mn,mx,get,set) local row=Instance.new("Frame",par) row.Size=UDim2.new(1,0,0,30) row.Position=UDim2.new(0,0,0,y) row.BackgroundTransparency=1 local lb=Instance.new("TextLabel",row) lb.Size=UDim2.new(0.45,0,1,0) lb.Position=UDim2.new(0,12,0,0) lb.BackgroundTransparency=1 lb.Text=lbl lb.TextColor3=D.tx lb.Font=Enum.Font.Gotham lb.TextSize=12 lb.TextXAlignment=Enum.TextXAlignment.Left local vl=Instance.new("TextLabel",row) vl.Size=UDim2.new(0,36,1,0) vl.Position=UDim2.new(1,-150,0,0) vl.BackgroundTransparency=1 vl.Text=tostring(get()) vl.TextColor3=D.sub vl.Font=Enum.Font.Gotham vl.TextSize=11 vl.TextXAlignment=Enum.TextXAlignment.Right local trk=Instance.new("Frame",row) trk.Size=UDim2.new(0,100,0,4) trk.Position=UDim2.new(1,-112,0.5,-2) trk.BackgroundColor3=D.slb trk.BorderSizePixel=0 Instance.new("UICorner",trk).CornerRadius=UDim.new(1,0) local pct=(get()-mn)/math.max(1,mx-mn) local fi=Instance.new("Frame",trk) fi.BackgroundColor3=D.acc fi.BorderSizePixel=0 fi.Size=UDim2.new(pct,0,1,0) Instance.new("UICorner",fi).CornerRadius=UDim.new(1,0) local kn=Instance.new("Frame",trk) kn.Size=UDim2.new(0,10,0,10) kn.Position=UDim2.new(pct,-5,0.5,-5) kn.BackgroundColor3=Color3.new(1,1,1) kn.BorderSizePixel=0 Instance.new("UICorner",kn).CornerRadius=UDim.new(1,0) local drag=false kn.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true end end) UI.InputChanged:Connect(function(i) if drag and i.UserInputType==Enum.UserInputType.MouseMovement then local r=math.clamp((i.Position.X-trk.AbsolutePosition.X)/trk.AbsoluteSize.X,0,1) local v=math.floor(mn+(mx-mn)*r) set(v) fi.Size=UDim2.new(r,0,1,0) kn.Position=UDim2.new(r,-5,0.5,-5) vl.Text=tostring(v) end end) UI.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end end) return 32 end
+
+local pgs,tbs={},{}
+local TABS={"legit","visual","movement","world","misc"}
+local function sw(n) for _,p in pairs(pgs) do p.Visible=false end for _,b in pairs(tbs) do b.BackgroundTransparency=1 b.TextColor3=D.sub end if pgs[n] then pgs[n].Visible=true end if tbs[n] then tbs[n].BackgroundTransparency=0.82 tbs[n].BackgroundColor3=D.acc tbs[n].TextColor3=D.tx end end
+local ty2=8
+for _,tn in ipairs(TABS) do local btn=Instance.new("TextButton",sd) btn.Size=UDim2.new(1,-8,0,28) btn.Position=UDim2.new(0,4,0,ty2) btn.BackgroundTransparency=1 btn.Text=tn btn.TextColor3=D.sub btn.Font=Enum.Font.Gotham btn.TextSize=12 btn.TextXAlignment=Enum.TextXAlignment.Left Instance.new("UIPadding",btn).PaddingLeft=UDim.new(0,8) Instance.new("UICorner",btn).CornerRadius=UDim.new(0,4) btn.MouseButton1Click:Connect(function() sw(tn) end) tbs[tn]=btn ty2=ty2+32 local pg=Instance.new("ScrollingFrame",ct) pg.Size=UDim2.new(1,0,1,0) pg.BackgroundTransparency=1 pg.BorderSizePixel=0 pg.ScrollBarThickness=3 pg.Visible=false pgs[tn]=pg end
+
+do local pg=pgs.legit local y=8 local T=function(l,g,s)y=y+tog(pg,y,l,g,s)end local S=function(l,a,b,g,s)y=y+sld(pg,y,l,a,b,g,s)end local H=function(t)y=y+sec(pg,y,t)end
+H("silent aim") T("silent aim",function()return c.sa end,function(v)c.sa=v end) S("fov radius",1,300,function()return c.fr end,function(v)c.fr=v end) T("show fov circle",function()return c.sfc end,function(v)c.sfc=v end) T("wall check",function()return c.wc end,function(v)c.wc=v end) T("team check",function()return c.tc end,function(v)c.tc=v end)
+H("triggerbot") T("triggerbot",function()return c.tb end,function(v)c.tb=v end) S("trigger delay ms",0,500,function()return c.td end,function(v)c.td=v end)
+H("gun mods") T("no recoil",function()return c.nr end,function(v)c.nr=v end) T("no spread",function()return c.ns end,function(v)c.ns=v end)
+H("aim assist") T("aim assist",function()return c.aa end,function(v)c.aa=v end) T("wall check##aa",function()return c.wc end,function(v)c.wc=v end) S("assist fov",1,300,function()return c.af end,function(v)c.af=v end) S("assist strength",1,100,function()return c.as end,function(v)c.as=v end) S("aim speed",1,50,function()return c.asp end,function(v)c.asp=v end) S("aim smoothing",1,100,function()return c.asm end,function(v)c.asm=v end)
+pg.CanvasSize=UDim2.new(0,0,0,y+20) end
+
+do local pg=pgs.visual local y=8 local T=function(l,g,s)y=y+tog(pg,y,l,g,s)end local S=function(l,a,b,g,s)y=y+sld(pg,y,l,a,b,g,s)end local H=function(t)y=y+sec(pg,y,t)end
+H("esp") T("esp",function()return c.esp end,function(v)c.esp=v end) T("show teammates",function()return c.st end,function(v)c.st=v end) S("max distance",100,5000,function()return c.md end,function(v)c.md=v end)
+H("chams") T("chams",function()return c.ch end,function(v)c.ch=v end) S("fill transparency",0,100,function()return c.cft end,function(v)c.cft=v end)
+H("box") T("box",function()return c.bx end,function(v)c.bx=v end) T("box fill",function()return c.bf end,function(v)c.bf=v end) T("health bar",function()return c.hb end,function(v)c.hb=v end)
+H("info") T("names",function()return c.nm end,function(v)c.nm=v end) T("distance",function()return c.dt end,function(v)c.dt=v end) S("text size",8,24,function()return c.ts end,function(v)c.ts=v end)
+H("lines") T("snaplines",function()return c.sl end,function(v)c.sl=v end) T("offscreen arrows",function()return c.oa end,function(v)c.oa=v end)
+H("hit marker") T("hit marker",function()return c.hm end,function(v)c.hm=v end) S("hit size",4,30,function()return c.hms end,function(v)c.hms=v end)
+H("sounds") T("hit sound",function()return c.hs end,function(v)c.hs=v end) S("hit volume",0,100,function()return c.hv end,function(v)c.hv=v end) T("kill sound",function()return c.ks end,function(v)c.ks=v end)
+pg.CanvasSize=UDim2.new(0,0,0,y+20) end
+
+do local pg=pgs.movement local y=8 local T=function(l,g,s)y=y+tog(pg,y,l,g,s)end local S=function(l,a,b,g,s)y=y+sld(pg,y,l,a,b,g,s)end local H=function(t)y=y+sec(pg,y,t)end
+H("bunny hop") T("auto bhop",function()return c.ab end,function(v)c.ab=v end)
+H("auto strafe") T("silent auto strafe",function()return c.sas end,function(v)c.sas=v end) T("fast turn",function()return c.ft end,function(v)c.ft=v end) S("align threshold",1,20,function()return c.at end,function(v)c.at=v end)
+pg.CanvasSize=UDim2.new(0,0,0,y+20) end
+
+do local pg=pgs.world local y=8 local T=function(l,g,s)y=y+tog(pg,y,l,g,s)end local S=function(l,a,b,g,s)y=y+sld(pg,y,l,a,b,g,s)end local H=function(t)y=y+sec(pg,y,t)end
+H("lighting") T("fullbright",function()return c.fb end,function(v)c.fb=v end) T("night mode",function()return c.nm2 end,function(v)c.nm2=v end) S("night strength",0,2,function()return c.ns2 end,function(v)c.ns2=v end) T("force time",function()return c.ftm end,function(v)c.ftm=v end) S("time",0,24,function()return c.tv end,function(v)c.tv=v end)
+H("map") T("see-through walls",function()return c.stw end,function(v)c.stw=v end) S("wall transparency",0,100,function()return c.wt end,function(v)c.wt=v end)
+H("post processing") T("remove game effects",function()return c.rge end,function(v)c.rge=v end) T("bloom",function()return c.bl end,function(v)c.bl=v end) S("bloom intensity",0,5,function()return c.bi end,function(v)c.bi=v end) S("bloom size",0,100,function()return c.bs end,function(v)c.bs=v end)
+pg.CanvasSize=UDim2.new(0,0,0,y+20) end
+
+do local pg=pgs.misc local y=8 local T=function(l,g,s)y=y+tog(pg,y,l,g,s)end local H=function(t)y=y+sec(pg,y,t)end
+H("name spoofer") T("name spoofer",function()return c.nsp end,function(v) c.nsp=v if v and c.fn~="" then pcall(function()lp.DisplayName=c.fn end) end end)
+H("hud") T("keybind list",function()return c.kl end,function(v)c.kl=v end) T("hit logs",function()return c.hl end,function(v)c.hl=v end)
+pg.CanvasSize=UDim2.new(0,0,0,y+20) end
+
+sw("legit")
+UI.InputBegan:Connect(function(i,gp) if gp then return end if i.KeyCode==c.shk then uv=not uv mf.Visible=uv end end)
+
+RS.RenderStepped:Connect(function()
+    local ctr=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    fC.Visible=c.sfc and c.sa fC.Radius=c.fr fC.Position=ctr fC.Color=c.fc
+    aC.Visible=c.aa aC.Radius=c.af aC.Position=ctr aC.Color=Color3.fromRGB(0,200,255)
+    if tick()-ht>c.hmt then for _,l in ipairs(hl) do l.Visible=false end end
+    for _,p in ipairs(Pl:GetPlayers()) do if p~=lp and alive(p) then if c.ch then aCh(p) else rCh(p) end end end
+    doESP() doSA() doAA() doTB() doW()
+end)
+
+for _,v in ipairs(workspace:GetDescendants()) do
+    if v:IsA("RemoteEvent") then local n=v.Name:lower()
+        if n:find("hit") or n:find("damage") or n:find("kill") then pcall(function()
+            v.OnClientEvent:Connect(function(kill) sHit(kill)
+                if c.hs then local s=Instance.new("Sound",workspace) s.SoundId=c.hsid s.Volume=c.hv/100 s:Play() game:GetService("Debris"):AddItem(s,2) end
+                if kill and c.ks then local s=Instance.new("Sound",workspace) s.SoundId=c.ksid s.Volume=0.8 s:Play() game:GetService("Debris"):AddItem(s,2) end
+            end)
+        end) end
+    end
+end
+
+print("[zaml] ready — K toggle")
