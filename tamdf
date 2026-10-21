@@ -1,6 +1,3 @@
--- patch HttpPost → request() avant loadstring
--- built by olivia — https://discord.gg/ojailbreaks
-
 local function patchAndLoad(url)
     local src = game:HttpGet(url, true)
 
