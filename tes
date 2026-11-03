@@ -1,0 +1,6112 @@
+local userInputService = game:GetService("UserInputService")
+local tweenService = game:GetService("TweenService")
+local players = game:GetService("Players")
+local runService = game:GetService("RunService")
+local workspace = game:GetService("Workspace")
+local starterGui = game:GetService("StarterGui")
+local guiService = game:GetService("GuiService")
+local virtualInputManager = game:GetService("VirtualInputManager")
+local coreGui = game:GetService("CoreGui")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local v1
+
+do
+  local v2, v3 = pcall(function() return virtualInputManager end)
+
+  if v2 and v3 then
+    v1 = v3
+  else
+    v1 = {
+      SendMouseButtonEvent = function() end,
+      SendKeyEvent = function() end,
+      SendMouseMoveEvent = function() end,
+    }
+  end
+end
+
+local localPlayer = players.LocalPlayer
+
+local v4 = {
+  Ready = false,
+  _queue = {},
+  RegisterKill = function(p1, p2)
+    if StatsBridge.Ready and StatsBridge._impl then
+      StatsBridge._impl(p1, p2)
+    else
+      StatsBridge._queue[#StatsBridge._queue + 1] = { p1, p2 }
+    end
+  end,
+  _impl = nil,
+  NotifyMoney = function() end,
+}
+
+if not localPlayer then
+  players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+  localPlayer = players.LocalPlayer
+end
+
+local currentCamera = workspace.CurrentCamera
+local waitForChild = localPlayer:WaitForChild("PlayerGui", 15)
+pcall(function() runService:UnbindFromRenderStep("NIEHMU_CamFOV") end)
+
+local function f1()
+  local v5 = {}
+
+  pcall(function()
+    if type(gethui) == "function" then
+      local v6 = gethui()
+
+      if v6 then
+        table.insert(v5, v6)
+      end
+    end
+  end)
+
+  pcall(function()
+    if type(get_hidden_gui) == "function" then
+      local v7 = get_hidden_gui()
+
+      if v7 then
+        table.insert(v5, v7)
+      end
+    end
+  end)
+
+  pcall(function() table.insert(v5, coreGui) end)
+
+  if waitForChild then
+    table.insert(v5, waitForChild)
+  end
+
+  for index, value in ipairs(v5) do
+    if pcall(function()
+      local niehmuParentProbe = Instance.new("Folder")
+      niehmuParentProbe.Name = "NIEHMU_ParentProbe"
+      niehmuParentProbe.Parent = value
+      niehmuParentProbe:Destroy()
+    end) then
+      return value
+    end
+  end
+
+  return waitForChild
+end
+
+local v8 = f1() or waitForChild
+
+local v9 = {
+  FOV = 420,
+  CameraFOV = 70,
+  CameraFOVEnabled = false,
+  ESPEnabled = false,
+  ESPMaxDistance = 900,
+  CamFovUpKey = Enum.KeyCode.RightBracket,
+  CamFovDownKey = Enum.KeyCode.LeftBracket,
+  CamFovStep = 5,
+  MinimizeKey = Enum.KeyCode.Insert,
+}
+
+local v10 = {
+  Enabled = false,
+  MaxDistance = 5000,
+  Chams = {
+    Enabled = false,
+    Fill = Color3.fromRGB(140, 8, 18),
+    Outline = Color3.fromRGB(220, 30, 40),
+    FillTransparency = 0.45,
+    OutlineTransparency = 0.15,
+  },
+  Distance = { Enabled = false, Color = Color3.fromRGB(230, 210, 215) },
+  Health = { Enabled = false, Color = Color3.fromRGB(255, 120, 130) },
+  HeadImage = {
+    Enabled = false,
+    Size = 28,
+    Image = "",
+    FallbackColor = Color3.fromRGB(220, 30, 40),
+  },
+}
+
+local v11 = {
+  Enabled = false,
+  MaxDistance = 900,
+  Box = { Enabled = false, Color = Color3.fromRGB(255, 255, 255), Filled = false },
+  Chams = {
+    Enabled = false,
+    Fill = Color3.fromRGB(200, 40, 50),
+    Outline = Color3.fromRGB(255, 255, 255),
+    FillTransparency = 0.55,
+    OutlineTransparency = 0.2,
+  },
+  Name = {
+    Enabled = false,
+    Color = Color3.fromRGB(255, 255, 255),
+    Gradient = false,
+    Background = true,
+    Glow = true,
+  },
+  Tracer = { Enabled = false, Color = Color3.fromRGB(255, 80, 90), Origin = "Middle" },
+  Distance = { Enabled = false, Color = Color3.fromRGB(180, 180, 190) },
+  HeadDot = { Enabled = false, Color = Color3.fromRGB(255, 50, 50), Size = 6 },
+}
+
+local v12 = false
+local v13 = nil
+local v14 = true
+local v15 = {}
+
+local function f2(p3, p4)
+  local connect = p3:Connect(p4)
+  table.insert(v15, connect)
+  return connect
+end
+
+local v16 = {
+  Bg = Color3.fromRGB(4, 0, 0),
+  Glass = Color3.fromRGB(14, 0, 2),
+  GlassAlt = Color3.fromRGB(20, 1, 3),
+  Row = Color3.fromRGB(10, 0, 1),
+  RowHover = Color3.fromRGB(28, 2, 5),
+  Accent = Color3.fromRGB(160, 12, 22),
+  AccentSoft = Color3.fromRGB(100, 6, 12),
+  AccentGlow = Color3.fromRGB(220, 25, 40),
+  Text = Color3.fromRGB(230, 200, 200),
+  TextDim = Color3.fromRGB(140, 100, 105),
+  TextMuted = Color3.fromRGB(90, 55, 60),
+  On = Color3.fromRGB(170, 14, 24),
+  Off = Color3.fromRGB(16, 1, 2),
+  Border = Color3.fromRGB(90, 8, 14),
+  BorderSoft = Color3.fromRGB(50, 4, 8),
+  Close = Color3.fromRGB(180, 16, 26),
+  CloseHover = Color3.fromRGB(240, 30, 45),
+  Min = Color3.fromRGB(200, 140, 30),
+  MinHover = Color3.fromRGB(240, 180, 50),
+  ESP = Color3.fromRGB(200, 20, 35),
+  Shadow = Color3.fromRGB(0, 0, 0),
+  Neon = Color3.fromRGB(255, 30, 45),
+}
+
+local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local tweenInfo2 = TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local tweenInfo3 = TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local tweenInfo4 = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+
+pcall(function()
+  local niehmuPanel = v8:FindFirstChild("NIEHMU_Panel")
+
+  if niehmuPanel then
+    niehmuPanel:Destroy()
+  end
+
+  if waitForChild then
+    local niehmuPanel2 = waitForChild:FindFirstChild("NIEHMU_Panel")
+
+    if niehmuPanel2 then
+      niehmuPanel2:Destroy()
+    end
+  end
+
+  pcall(function()
+    local niehmuPanel3 = coreGui:FindFirstChild("NIEHMU_Panel")
+
+    if niehmuPanel3 then
+      niehmuPanel3:Destroy()
+    end
+  end)
+end)
+
+local niehmuPanel4, frame, v17, instance, instance2, instance3, instance4, instance5, instance6, instance7 = nil, nil, nil, nil, nil, nil, nil, nil, nil
+local instance8, v18, v19, f3, f4, v20, v21 = nil, nil, nil, nil, nil, nil, nil
+local v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32 = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+local v33, v34, v35, instance9, v36, v37, v38, v39, v40, instance10 = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+local instance11, instance12, f5, f6, cameraFOV, f7, f8, instance13, instance14, instance15 = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+local instance16, v41, f9, f10, f11, f12, v42, instance17, instance18, niehmuESP = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+local frame2, instance19, instance20, instance21, instance22, instance23, instance24, instance25, instance26, instance27 = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+local niehmuStats, instance28, v43, v44, f13, f14 = nil, nil, nil, nil, nil, nil
+
+local function f15()
+  niehmuPanel4 = Instance.new("ScreenGui")
+  niehmuPanel4.Name = "NIEHMU_Panel"
+  niehmuPanel4.ResetOnSpawn = false
+  niehmuPanel4.IgnoreGuiInset = true
+  niehmuPanel4.DisplayOrder = 9999
+  niehmuPanel4.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+  pcall(function()
+    if syn and type(syn.protect_gui) == "function" then
+      syn.protect_gui(niehmuPanel4)
+    end
+  end)
+
+  pcall(function()
+    if type(protect_gui) == "function" then
+      protect_gui(niehmuPanel4)
+    end
+  end)
+
+  pcall(function()
+    if type(protectgui) == "function" then
+      protectgui(niehmuPanel4)
+    end
+  end)
+
+  if not pcall(function() niehmuPanel4.Parent = v8 end) then
+    pcall(function() niehmuPanel4.Parent = waitForChild end)
+  end
+
+  pcall(function() niehmuPanel4.Enabled = true end)
+
+  frame2 = Instance.new("Frame")
+  frame2.AnchorPoint = Vector2.new(0.5, 0.5)
+  frame2.Position = UDim2.new(0.5, 0, 0.5, 0)
+  frame2.Size = UDim2.fromOffset(v9.FOV * 2, v9.FOV * 2)
+  frame2.BackgroundTransparency = 1
+  frame2.BorderSizePixel = 0
+  frame2.Visible = false
+  frame2.ZIndex = 5
+  frame2.Parent = niehmuPanel4
+
+  Instance.new("UICorner", frame2).CornerRadius = UDim.new(1, 0)
+
+  local instance29 = Instance.new("UIStroke", frame2)
+  instance29.Color = v16.Accent
+  instance29.Thickness = 1.4
+  instance29.Transparency = 0.4
+
+  frame = Instance.new("Frame")
+  frame.Size = UDim2.new(0, 332, 0, 458)
+  frame.Position = UDim2.new(0.5, -166, 0.1, 0)
+  frame.BackgroundColor3 = Color3.fromRGB(5, 0, 1)
+  frame.BackgroundTransparency = 0.08
+  frame.BorderSizePixel = 0
+  frame.ClipsDescendants = true
+  frame.Visible = true
+  frame.Parent = niehmuPanel4
+
+  Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 20)
+  v17 = { Transparency = 1 }
+
+  instance4 = Instance.new("Frame", frame)
+  instance4.Size = UDim2.new(1, 0, 1, 0)
+  instance4.BackgroundTransparency = 1
+  instance4.BorderSizePixel = 0
+  instance4.ZIndex = 0
+  instance4.ClipsDescendants = true
+  instance4.Active = false
+
+  local instance30 = Instance.new("Frame", frame)
+  instance30.Size = UDim2.new(1, 0, 1, 0)
+  instance30.BackgroundColor3 = Color3.fromRGB(8, 0, 1)
+  instance30.BackgroundTransparency = 0.42
+  instance30.BorderSizePixel = 0
+  instance30.ZIndex = 1
+
+  Instance.new("UICorner", instance30).CornerRadius = UDim.new(0, 20)
+
+  local instance31 = Instance.new("Frame", frame)
+  instance31.Size = UDim2.new(1, -4, 0, 1)
+  instance31.Position = UDim2.new(0, 2, 0, 0)
+  instance31.BackgroundColor3 = Color3.fromRGB(255, 80, 100)
+  instance31.BackgroundTransparency = 0.72
+  instance31.BorderSizePixel = 0
+  instance31.ZIndex = 2
+
+  Instance.new("UICorner", instance31).CornerRadius = UDim.new(1, 0)
+
+  local instance32 = Instance.new("Frame", frame)
+  instance32.Size = UDim2.new(1, 0, 0, 48)
+  instance32.BackgroundColor3 = v16.Glass
+  instance32.BackgroundTransparency = 0.25
+  instance32.ZIndex = 3
+  instance32.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance32).CornerRadius = UDim.new(0, 20)
+
+  local instance33 = Instance.new("Frame", instance32)
+  instance33.Size = UDim2.new(0, 2, 0, 22)
+  instance33.Position = UDim2.new(0, 0, 0.5, -11)
+  instance33.BackgroundColor3 = Color3.fromRGB(255, 70, 95)
+  instance33.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance33).CornerRadius = UDim.new(1, 0)
+
+  instance5 = Instance.new("TextLabel", instance32)
+  instance5.AutomaticSize = Enum.AutomaticSize.X
+  instance5.Size = UDim2.new(0, 0, 1, 0)
+  instance5.Position = UDim2.new(0, 20, 0, 0)
+  instance5.BackgroundTransparency = 1
+  instance5.Text = "NIEHMU"
+  instance5.TextColor3 = Color3.fromRGB(0, 0, 0)
+  instance5.Font = Enum.Font.GothamBlack
+  instance5.TextSize = 19
+  instance5.TextXAlignment = Enum.TextXAlignment.Left
+  instance5.ZIndex = 5
+
+  instance6 = Instance.new("UIStroke", instance5)
+  instance6.Color = Color3.fromRGB(165, 8, 16)
+  instance6.Thickness = 2.2
+  instance6.Transparency = 0
+
+  instance7 = Instance.new("TextLabel", instance32)
+  instance7.AutomaticSize = Enum.AutomaticSize.X
+  instance7.Size = UDim2.new(0, 0, 0, 18)
+  instance7.Position = UDim2.new(0, 20, 0.5, -7)
+  instance7.BackgroundTransparency = 1
+  instance7.Text = "V1"
+  instance7.TextColor3 = Color3.fromRGB(0, 0, 0)
+  instance7.Font = Enum.Font.GothamBlack
+  instance7.TextSize = 12
+  instance7.TextXAlignment = Enum.TextXAlignment.Left
+  instance7.TextYAlignment = Enum.TextYAlignment.Center
+  instance7.ZIndex = 5
+
+  instance8 = Instance.new("UIStroke", instance7)
+  instance8.Color = Color3.fromRGB(165, 8, 16)
+  instance8.Thickness = 1.4
+  instance8.Transparency = 0.15
+
+  local function f16()
+    local v45 = instance5.Position.X.Offset + instance5.AbsoluteSize.X + 3
+    instance7.Position = UDim2.new(0, v45, 0.5, -7)
+  end
+
+  task.defer(f16)
+  instance5:GetPropertyChangedSignal("AbsoluteSize"):Connect(f16)
+
+  instance17 = Instance.new("TextButton", instance32)
+  instance17.Size = UDim2.new(0, 14, 0, 14)
+  instance17.Position = UDim2.new(1, -58, 0.5, -7)
+  instance17.BackgroundColor3 = Color3.fromRGB(210, 150, 20)
+  instance17.Text = ""
+  instance17.AutoButtonColor = false
+  instance17.ZIndex = 5
+
+  Instance.new("UICorner", instance17).CornerRadius = UDim.new(1, 0)
+
+  local instance34 = Instance.new("UIStroke", instance17)
+  instance34.Color = Color3.fromRGB(255, 210, 80)
+  instance34.Thickness = 1
+  instance34.Transparency = 0.6
+
+  instance18 = Instance.new("TextButton", instance32)
+  instance18.Size = UDim2.new(0, 14, 0, 14)
+  instance18.Position = UDim2.new(1, -32, 0.5, -7)
+  instance18.BackgroundColor3 = Color3.fromRGB(190, 18, 30)
+  instance18.Text = ""
+  instance18.AutoButtonColor = false
+  instance18.ZIndex = 5
+
+  Instance.new("UICorner", instance18).CornerRadius = UDim.new(1, 0)
+
+  local instance35 = Instance.new("UIStroke", instance18)
+  instance35.Color = Color3.fromRGB(255, 50, 70)
+  instance35.Thickness = 1
+  instance35.Transparency = 0.6
+
+  function f14(p5, backgroundColor3, backgroundColor32, p6, p7)
+    p5.MouseEnter:Connect(function()
+      tweenService:Create(p5, tweenInfo2, {
+        BackgroundColor3 = backgroundColor32,
+        Size = UDim2.new(0, 16, 0, 16),
+      }):Play()
+
+      if p6 then
+        tweenService:Create(p6, tweenInfo2, { Transparency = p7 or 0.1 }):Play()
+      end
+    end)
+
+    p5.MouseLeave:Connect(function()
+      tweenService:Create(p5, tweenInfo2, {
+        BackgroundColor3 = backgroundColor3,
+        Size = UDim2.new(0, 14, 0, 14),
+      }):Play()
+
+      if p6 then
+        tweenService:Create(p6, tweenInfo2, { Transparency = 0.6 }):Play()
+      end
+    end)
+
+    p5.MouseButton1Down:Connect(function()
+      tweenService:Create(p5, tweenInfo, {
+        Size = UDim2.new(0, 11, 0, 11),
+        BackgroundTransparency = 0.25,
+      }):Play()
+    end)
+
+    p5.MouseButton1Up:Connect(function()
+      tweenService:Create(p5, tweenInfo2, {
+        Size = UDim2.new(0, 16, 0, 16),
+        BackgroundTransparency = 0,
+      }):Play()
+    end)
+  end
+
+  f14(instance17, Color3.fromRGB(210, 150, 20), Color3.fromRGB(255, 200, 60), instance34, 0.05)
+  f14(instance18, Color3.fromRGB(190, 18, 30), Color3.fromRGB(255, 35, 55), instance35, 0.05)
+
+  local v46, position, position2 = false, nil, nil
+
+  f2(instance32.InputBegan, function(p8)
+    if p8.UserInputType == Enum.UserInputType.MouseButton1
+      or p8.UserInputType == Enum.UserInputType.Touch then
+      v46 = true
+      position = p8.Position
+      position2 = frame.Position
+    end
+  end)
+
+  f2(instance32.InputEnded, function(p9)
+    if p9.UserInputType == Enum.UserInputType.MouseButton1
+      or p9.UserInputType == Enum.UserInputType.Touch then
+      v46 = false
+    end
+  end)
+
+  f2(userInputService.InputChanged, function(p10)
+    if v46
+      and (p10.UserInputType == Enum.UserInputType.MouseMovement
+        or p10.UserInputType == Enum.UserInputType.Touch) then
+      local v47 = p10.Position - position
+
+      frame.Position = UDim2.new(
+        position2.X.Scale, position2.X.Offset + v47.X, position2.Y.Scale,
+        position2.Y.Offset + v47.Y
+      )
+    end
+  end)
+
+  instance = Instance.new("Frame", frame)
+  instance.Size = UDim2.new(1, -24, 0, 38)
+  instance.Position = UDim2.new(0, 12, 0, 55)
+  instance.BackgroundColor3 = Color3.fromRGB(6, 0, 1)
+  instance.BackgroundTransparency = 0.15
+  instance.BorderSizePixel = 0
+  instance.ZIndex = 3
+
+  Instance.new("UICorner", instance).CornerRadius = UDim.new(0, 13)
+
+  local instance36 = Instance.new("UIStroke", instance)
+  instance36.Color = Color3.fromRGB(130, 10, 18)
+  instance36.Thickness = 1.2
+  instance36.Transparency = 0.42
+
+  local instance37 = Instance.new("Frame", instance)
+  instance37.Size = UDim2.new(0.25, -6, 1, -8)
+  instance37.Position = UDim2.new(0, 3, 0, 4)
+  instance37.BackgroundColor3 = Color3.fromRGB(130, 10, 20)
+  instance37.BackgroundTransparency = 0.45
+  instance37.BorderSizePixel = 0
+  instance37.ZIndex = 2
+
+  Instance.new("UICorner", instance37).CornerRadius = UDim.new(0, 9)
+
+  local instance38 = Instance.new("UIStroke", instance37)
+  instance38.Color = Color3.fromRGB(220, 25, 42)
+  instance38.Thickness = 1
+  instance38.Transparency = 0.3
+
+  local v48 = { "AUTO", "AIM", "ESP", "MISC" }
+  local v49, v50 = {}, {}
+  local tweenInfo5 = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+  local tweenInfo6 = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+  local v51 = "AUTO"
+
+  for index2, value2 in ipairs(v48) do
+    local instance39 = Instance.new("TextButton", instance)
+    instance39.Size = UDim2.new(1 / #v48, -6, 1, -8)
+    instance39.Position = UDim2.new((index2 - 1) / #v48, 3, 0, 4)
+    instance39.BackgroundTransparency = 1
+    instance39.Text = value2
+    instance39.TextColor3 = v16.TextDim
+    instance39.Font = Enum.Font.GothamBlack
+    instance39.TextSize = 11
+    instance39.AutoButtonColor = false
+    instance39.ZIndex = 4
+
+    Instance.new("UICorner", instance39).CornerRadius = UDim.new(0, 9)
+    v49[value2] = instance39
+
+    local instance40 = Instance.new("Frame", instance39)
+    instance40.AnchorPoint = Vector2.new(0.5, 1)
+    instance40.Position = UDim2.new(0.5, 0, 1, 0)
+    instance40.Size = UDim2.new(0.28, 0, 0, 2)
+    instance40.BackgroundColor3 = Color3.fromRGB(255, 30, 50)
+    instance40.BackgroundTransparency = 1
+    instance40.BorderSizePixel = 0
+    instance40.ZIndex = 5
+
+    Instance.new("UICorner", instance40).CornerRadius = UDim.new(1, 0)
+    v50[value2] = instance40
+
+    instance39.MouseEnter:Connect(function()
+      if v51 ~= value2 then
+        tweenService:Create(instance39, tweenInfo5, {
+          TextColor3 = Color3.fromRGB(180, 130, 135),
+        }):Play()
+      end
+    end)
+
+    instance39.MouseLeave:Connect(function()
+      if v51 ~= value2 then
+        tweenService:Create(instance39, tweenInfo5, { TextColor3 = v16.TextDim }):Play()
+      end
+    end)
+
+    instance39.MouseButton1Down:Connect(function()
+      tweenService:Create(instance39, tweenInfo, { TextSize = 10 }):Play()
+    end)
+
+    instance39.MouseButton1Up:Connect(function()
+      tweenService:Create(instance39, tweenInfo2, { TextSize = 11 }):Play()
+    end)
+  end
+
+  local function f17(p11)
+    v51 = p11
+    local v52 = ((table.find(v48, p11) or 1) - 1) / #v48
+    tweenService:Create(instance37, tweenInfo6, { Position = UDim2.new(v52, 3, 0, 4) }):Play()
+
+    for key, value3 in pairs(v49) do
+      local v53 = v50[key]
+
+      if key == p11 then
+        tweenService:Create(value3, tweenInfo5, {
+          TextColor3 = Color3.fromRGB(255, 230, 232),
+          BackgroundTransparency = 1,
+        }):Play()
+
+        tweenService:Create(v53, tweenInfo6, {
+          BackgroundTransparency = 0,
+          Size = UDim2.new(0.5, 0, 0, 2),
+        }):Play()
+      else
+        tweenService:Create(value3, tweenInfo5, {
+          TextColor3 = v16.TextDim,
+          BackgroundTransparency = 1,
+        }):Play()
+
+        tweenService:Create(v53, tweenInfo5, {
+          BackgroundTransparency = 1,
+          Size = UDim2.new(0.28, 0, 0, 2),
+        }):Play()
+      end
+    end
+  end
+
+  instance2 = Instance.new("Frame", frame)
+  instance2.Size = UDim2.new(1, -24, 1, -108)
+  instance2.Position = UDim2.new(0, 12, 0, 102)
+  instance2.BackgroundTransparency = 1
+  instance2.ClipsDescendants = true
+  instance2.ZIndex = 3
+
+  instance3 = Instance.new("ScrollingFrame", instance2)
+  instance3.Size = UDim2.new(1, 0, 1, 0)
+  instance3.BackgroundTransparency = 1
+  instance3.BorderSizePixel = 0
+  instance3.ScrollBarThickness = 3
+  instance3.ScrollBarImageColor3 = v16.Accent
+  instance3.ScrollingDirection = Enum.ScrollingDirection.Y
+  instance3.CanvasSize = UDim2.new(0, 0, 0, 0)
+  instance3.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+  local instance41 = Instance.new("UIListLayout", instance3)
+  instance41.SortOrder = Enum.SortOrder.LayoutOrder
+  instance41.Padding = UDim.new(0, 2)
+
+  v18 = {}
+  v19 = nil
+
+  function f3(p12)
+    if not p12 then
+      return "-"
+    end
+
+    return p12.Name or tostring(p12)
+  end
+
+  local function f18(p13, text, layoutOrder)
+    local instance42 = Instance.new("Frame", p13)
+    instance42.Size = UDim2.new(1, 0, 0, 34)
+    instance42.BackgroundColor3 = v16.GlassAlt
+    instance42.BackgroundTransparency = 0.28
+    instance42.BorderSizePixel = 0
+    instance42.LayoutOrder = layoutOrder
+
+    Instance.new("UICorner", instance42).CornerRadius = UDim.new(0, 10)
+
+    local instance43 = Instance.new("UIStroke", instance42)
+    instance43.Color = Color3.fromRGB(90, 8, 14)
+    instance43.Thickness = 1
+    instance43.Transparency = 0.55
+
+    local instance44 = Instance.new("Frame", instance42)
+    instance44.Size = UDim2.new(0, 3, 0, 18)
+    instance44.Position = UDim2.new(0, 12, 0.5, -9)
+    instance44.BackgroundColor3 = Color3.fromRGB(240, 28, 46)
+    instance44.BorderSizePixel = 0
+    instance44.ZIndex = 3
+
+    Instance.new("UICorner", instance44).CornerRadius = UDim.new(1, 0)
+
+    local instance45 = Instance.new("Frame", instance42)
+    instance45.Size = UDim2.new(0, 8, 0, 24)
+    instance45.Position = UDim2.new(0, 9.5, 0.5, -12)
+    instance45.BackgroundColor3 = Color3.fromRGB(200, 15, 30)
+    instance45.BackgroundTransparency = 0.68
+    instance45.BorderSizePixel = 0
+    instance45.ZIndex = 2
+
+    Instance.new("UICorner", instance45).CornerRadius = UDim.new(1, 0)
+
+    local instance46 = Instance.new("TextLabel", instance42)
+    instance46.Size = UDim2.new(1, -34, 1, 0)
+    instance46.Position = UDim2.new(0, 26, 0, 0)
+    instance46.BackgroundTransparency = 1
+    instance46.Text = text
+    instance46.TextColor3 = Color3.fromRGB(255, 255, 255)
+    instance46.Font = Enum.Font.GothamBlack
+    instance46.TextSize = 13
+    instance46.TextXAlignment = Enum.TextXAlignment.Left
+    instance46.ZIndex = 3
+
+    local instance47 = Instance.new("UIStroke", instance46)
+    instance47.Color = Color3.fromRGB(10, 0, 0)
+    instance47.Thickness = 1
+    instance47.Transparency = 0.5
+
+    return instance42
+  end
+
+  local function f19(p14, text2, layoutOrder2, p15, p16)
+    local instance48 = Instance.new("Frame", p14)
+    instance48.Size = UDim2.new(1, 0, 0, 44)
+    instance48.BackgroundColor3 = v16.Row
+    instance48.BackgroundTransparency = 0.14
+    instance48.BorderSizePixel = 0
+    instance48.LayoutOrder = layoutOrder2
+
+    Instance.new("UICorner", instance48).CornerRadius = UDim.new(0, 12)
+
+    local instance49 = Instance.new("UIStroke", instance48)
+    instance49.Color = v16.BorderSoft
+    instance49.Thickness = 1
+    instance49.Transparency = 0.65
+
+    local instance50 = Instance.new("Frame", instance48)
+    instance50.Size = UDim2.new(0, 2, 0, 16)
+    instance50.Position = UDim2.new(0, 0, 0.5, -8)
+    instance50.BackgroundColor3 = v16.AccentSoft
+    instance50.BackgroundTransparency = 0.45
+    instance50.BorderSizePixel = 0
+
+    Instance.new("UICorner", instance50).CornerRadius = UDim.new(1, 0)
+
+    local instance51 = Instance.new("TextLabel", instance48)
+    instance51.Size = UDim2.new(1, -154, 1, 0)
+    instance51.Position = UDim2.new(0, 16, 0, 0)
+    instance51.BackgroundTransparency = 1
+    instance51.Text = text2
+    instance51.TextColor3 = v16.Text
+    instance51.Font = Enum.Font.GothamBold
+    instance51.TextSize = 13
+    instance51.TextXAlignment = Enum.TextXAlignment.Left
+    instance51.TextYAlignment = Enum.TextYAlignment.Center
+
+    local instance52 = Instance.new("TextButton", instance48)
+    instance52.Size = UDim2.new(0, 42, 0, 22)
+    instance52.Position = UDim2.new(1, -118, 0.5, -11)
+    instance52.BackgroundColor3 = v16.Off
+    instance52.BackgroundTransparency = 0.15
+    instance52.Text = f3(p16)
+    instance52.TextColor3 = v16.TextMuted
+    instance52.Font = Enum.Font.GothamBold
+    instance52.TextSize = 10
+    instance52.AutoButtonColor = false
+
+    Instance.new("UICorner", instance52).CornerRadius = UDim.new(0, 6)
+
+    local instance53 = Instance.new("TextButton", instance48)
+    instance53.Size = UDim2.new(0, 48, 0, 26)
+    instance53.Position = UDim2.new(1, -64, 0.5, -13)
+    instance53.BackgroundColor3 = v16.Off
+    instance53.BackgroundTransparency = 0.05
+    instance53.Text = ""
+    instance53.AutoButtonColor = false
+
+    Instance.new("UICorner", instance53).CornerRadius = UDim.new(1, 0)
+
+    local instance54 = Instance.new("Frame", instance53)
+    instance54.Size = UDim2.new(0, 20, 0, 20)
+    instance54.Position = UDim2.new(0, 3, 0.5, -10)
+    instance54.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+    instance54.BorderSizePixel = 0
+
+    Instance.new("UICorner", instance54).CornerRadius = UDim.new(1, 0)
+
+    if p15 then
+      v18[p15] = { key = p16, btn = instance52, callback = nil }
+
+      instance52.Activated:Connect(function()
+        if v19 == p15 then
+          v19 = nil
+
+          instance52.Text = f3(v18[p15].key)
+          instance52.TextColor3 = v16.TextMuted
+          instance52.BackgroundColor3 = v16.Off
+        else
+          v19 = p15
+          instance52.Text = "..."
+          instance52.TextColor3 = v16.Accent
+        end
+      end)
+    end
+
+    return instance53, instance54
+  end
+
+  local function f20(p17, text3, layoutOrder3, p18)
+    local instance55 = Instance.new("TextButton", p17)
+    instance55.Size = UDim2.new(1, 0, 0, 44)
+    instance55.BackgroundColor3 = p18 and v16.Accent or v16.Row
+    instance55.BackgroundTransparency = p18 and 0.06 or 0.14
+    instance55.Text = text3
+    instance55.TextColor3 = p18 and Color3.fromRGB(255, 245, 245) or v16.Text
+    instance55.Font = Enum.Font.GothamBold
+    instance55.TextSize = 13
+    instance55.AutoButtonColor = false
+    instance55.LayoutOrder = layoutOrder3
+
+    Instance.new("UICorner", instance55).CornerRadius = UDim.new(0, 12)
+
+    local instance56 = Instance.new("UIStroke", instance55)
+    instance56.Color = p18 and Color3.fromRGB(220, 28, 45) or v16.BorderSoft
+    instance56.Thickness = 1
+    instance56.Transparency = p18 and 0.35 or 0.6
+
+    return instance55
+  end
+
+  function f4(p19, p20, p21)
+    local tweenInfo7 = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+    local tweenInfo8 = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+
+    if p21 then
+      tweenService:Create(p19, tweenInfo7, { BackgroundColor3 = v16.On }):Play()
+      tweenService:Create(p20, tweenInfo8, { Position = UDim2.new(1, -23, 0.5, -10) }):Play()
+    else
+      tweenService:Create(p19, tweenInfo7, { BackgroundColor3 = v16.Off }):Play()
+      tweenService:Create(p20, tweenInfo8, { Position = UDim2.new(0, 3, 0.5, -10) }):Play()
+    end
+  end
+
+  instance13 = Instance.new("Frame", instance3)
+  instance13.Size = UDim2.new(1, 0, 0, 0)
+  instance13.AutomaticSize = Enum.AutomaticSize.Y
+  instance13.BackgroundTransparency = 1
+  instance13.LayoutOrder = 1
+  instance13.Visible = true
+
+  local instance57 = Instance.new("UIListLayout", instance13)
+  instance57.SortOrder = Enum.SortOrder.LayoutOrder
+  instance57.Padding = UDim.new(0, 8)
+
+  f18(instance13, "AUTOFARM", 1)
+  v22, v23 = f19(instance13, "Indetectable", 2, "autofarm_smart", Enum.KeyCode.F4)
+
+  for index3, value4 in ipairs(v22.Parent:GetChildren()) do
+    if value4:IsA("TextLabel") then
+      value4.TextColor3 = Color3.fromRGB(160, 12, 22)
+      value4.Text = "Indetectable"
+    end
+  end
+
+  v20, v21 = f19(instance13, "AntiDance", 3, "anti_dance", Enum.KeyCode.F3)
+
+  local instance58 = Instance.new("Frame", instance13)
+  instance58.Size = UDim2.new(1, 0, 0, 68)
+  instance58.BackgroundColor3 = v16.Row
+  instance58.BackgroundTransparency = 0.14
+  instance58.BorderSizePixel = 0
+  instance58.LayoutOrder = 4
+
+  Instance.new("UICorner", instance58).CornerRadius = UDim.new(0, 12)
+
+  local instance59 = Instance.new("UIStroke", instance58)
+  instance59.Color = v16.BorderSoft
+  instance59.Thickness = 1
+  instance59.Transparency = 0.65
+
+  local instance60 = Instance.new("Frame", instance58)
+  instance60.Size = UDim2.new(0, 3, 0, 24)
+  instance60.Position = UDim2.new(0, 0, 0.5, -12)
+  instance60.BackgroundColor3 = v16.Accent
+  instance60.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance60).CornerRadius = UDim.new(1, 0)
+
+  local instance61 = Instance.new("Frame", instance58)
+  instance61.Size = UDim2.new(1, -150, 1, 0)
+  instance61.Position = UDim2.new(0, 16, 0, 0)
+  instance61.BackgroundTransparency = 1
+
+  local instance62 = Instance.new("TextLabel", instance61)
+  instance62.Size = UDim2.new(1, 0, 0, 18)
+  instance62.Position = UDim2.new(0, 0, 0.5, -17)
+  instance62.BackgroundTransparency = 1
+  instance62.Text = "FARM PANEL"
+  instance62.TextColor3 = Color3.fromRGB(255, 235, 238)
+  instance62.Font = Enum.Font.GothamBlack
+  instance62.TextSize = 13
+  instance62.TextXAlignment = Enum.TextXAlignment.Left
+
+  local instance63 = Instance.new("TextLabel", instance61)
+  instance63.Size = UDim2.new(1, 0, 0, 14)
+  instance63.Position = UDim2.new(0, 0, 0.5, 2)
+  instance63.BackgroundTransparency = 1
+  instance63.Text = "Contrôle & statistiques"
+  instance63.TextColor3 = v16.TextDim
+  instance63.Font = Enum.Font.GothamBold
+  instance63.TextSize = 10
+  instance63.TextXAlignment = Enum.TextXAlignment.Left
+
+  local instance64 = Instance.new("TextButton", instance58)
+  instance64.Size = UDim2.new(0, 110, 0, 36)
+  instance64.AnchorPoint = Vector2.new(1, 0.5)
+  instance64.Position = UDim2.new(1, -14, 0.5, 0)
+  instance64.BackgroundColor3 = Color3.fromRGB(24, 2, 5)
+  instance64.BackgroundTransparency = 0.08
+  instance64.Text = "OPEN"
+  instance64.TextColor3 = Color3.fromRGB(255, 240, 242)
+  instance64.Font = Enum.Font.GothamBlack
+  instance64.TextSize = 11
+  instance64.AutoButtonColor = false
+
+  Instance.new("UICorner", instance64).CornerRadius = UDim.new(0, 10)
+
+  local instance65 = Instance.new("UIStroke", instance64)
+  instance65.Color = Color3.fromRGB(200, 24, 38)
+  instance65.Thickness = 1.2
+  instance65.Transparency = 0.35
+
+  local instance66 = Instance.new("Frame", instance64)
+  instance66.Size = UDim2.fromOffset(6, 6)
+  instance66.AnchorPoint = Vector2.new(0, 0.5)
+  instance66.Position = UDim2.new(0, 12, 0.5, 0)
+  instance66.BackgroundColor3 = v16.Off
+  instance66.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance66).CornerRadius = UDim.new(1, 0)
+
+  instance64.TextXAlignment = Enum.TextXAlignment.Center
+
+  instance64.MouseEnter:Connect(function()
+    tweenService:Create(instance64, tweenInfo2, {
+      BackgroundColor3 = Color3.fromRGB(36, 4, 8),
+      BackgroundTransparency = 0,
+    }):Play()
+
+    tweenService:Create(instance65, tweenInfo2, { Transparency = 0.1 }):Play()
+    tweenService:Create(instance58, tweenInfo2, { BackgroundColor3 = Color3.fromRGB(14, 1, 2) }):Play()
+    tweenService:Create(instance59, tweenInfo2, { Transparency = 0.35 }):Play()
+  end)
+
+  instance64.MouseLeave:Connect(function()
+    tweenService:Create(instance64, tweenInfo2, {
+      BackgroundColor3 = Color3.fromRGB(24, 2, 5),
+      BackgroundTransparency = 0.08,
+    }):Play()
+
+    tweenService:Create(instance65, tweenInfo2, { Transparency = 0.35 }):Play()
+    tweenService:Create(instance58, tweenInfo2, { BackgroundColor3 = v16.Row }):Play()
+    tweenService:Create(instance59, tweenInfo2, { Transparency = 0.65 }):Play()
+  end)
+
+  instance64.MouseButton1Down:Connect(function()
+    tweenService:Create(instance64, tweenInfo, {
+      Size = UDim2.new(0, 104, 0, 33),
+      BackgroundTransparency = 0,
+    }):Play()
+  end)
+
+  instance64.MouseButton1Up:Connect(function()
+    tweenService:Create(instance64, tweenInfo2, {
+      Size = UDim2.new(0, 110, 0, 36),
+      BackgroundTransparency = 0.08,
+    }):Play()
+  end)
+
+  instance64.Activated:Connect(function()
+    if _G.NIEHMU_ToggleFarmPanel then
+      _G.NIEHMU_ToggleFarmPanel()
+    end
+  end)
+
+  instance14 = Instance.new("Frame", instance3)
+  instance14.Size = UDim2.new(1, 0, 0, 0)
+  instance14.AutomaticSize = Enum.AutomaticSize.Y
+  instance14.BackgroundTransparency = 1
+  instance14.LayoutOrder = 2
+  instance14.Visible = false
+
+  local instance67 = Instance.new("UIListLayout", instance14)
+  instance67.SortOrder = Enum.SortOrder.LayoutOrder
+  instance67.Padding = UDim.new(0, 8)
+
+  f18(instance14, "CAMERA FOV", 1)
+  v39, v40 = f19(instance14, "FOV", 2, "cam_fov", nil)
+
+  local instance68 = Instance.new("Frame", instance14)
+  instance68.Size = UDim2.new(1, 0, 0, 58)
+  instance68.BackgroundColor3 = v16.Row
+  instance68.BackgroundTransparency = 0.08
+  instance68.BorderSizePixel = 0
+  instance68.LayoutOrder = 3
+
+  Instance.new("UICorner", instance68).CornerRadius = UDim.new(0, 12)
+
+  local instance69 = Instance.new("UIStroke", instance68)
+  instance69.Color = v16.BorderSoft
+  instance69.Thickness = 1
+  instance69.Transparency = 0.5
+
+  local instance70 = Instance.new("TextLabel", instance68)
+  instance70.Size = UDim2.new(0, 30, 0, 14)
+  instance70.Position = UDim2.new(0, 14, 0, 8)
+  instance70.BackgroundTransparency = 1
+  instance70.Text = "FOV"
+  instance70.TextColor3 = v16.TextDim
+  instance70.Font = Enum.Font.GothamBold
+  instance70.TextSize = 10
+  instance70.TextXAlignment = Enum.TextXAlignment.Left
+
+  instance10 = Instance.new("TextLabel", instance68)
+  instance10.Size = UDim2.new(0, 44, 0, 28)
+  instance10.Position = UDim2.new(0, 10, 0.5, -4)
+  instance10.BackgroundColor3 = Color3.fromRGB(20, 1, 3)
+  instance10.BackgroundTransparency = 0.1
+  instance10.Text = "70"
+  instance10.TextColor3 = v16.AccentGlow
+  instance10.Font = Enum.Font.GothamBlack
+  instance10.TextSize = 14
+  instance10.TextXAlignment = Enum.TextXAlignment.Center
+
+  Instance.new("UICorner", instance10).CornerRadius = UDim.new(0, 7)
+
+  local instance71 = Instance.new("UIStroke", instance10)
+  instance71.Color = v16.AccentSoft
+  instance71.Thickness = 1
+  instance71.Transparency = 0.5
+
+  instance20 = Instance.new("Frame", instance68)
+  instance20.Size = UDim2.new(1, -72, 0, 5)
+  instance20.Position = UDim2.new(0, 58, 0.5, 4)
+  instance20.BackgroundColor3 = v16.Off
+  instance20.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance20).CornerRadius = UDim.new(1, 0)
+
+  local instance72 = Instance.new("UIStroke", instance20)
+  instance72.Color = v16.BorderSoft
+  instance72.Thickness = 1
+  instance72.Transparency = 0.6
+
+  local v54 = math.clamp(0.5798319327731093, 0, 1)
+
+  instance11 = Instance.new("Frame", instance20)
+  instance11.Size = UDim2.new(v54, 0, 1, 0)
+  instance11.BackgroundColor3 = v16.Accent
+  instance11.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance11).CornerRadius = UDim.new(1, 0)
+
+  instance12 = Instance.new("Frame", instance20)
+  instance12.Size = UDim2.fromOffset(12, 12)
+  instance12.AnchorPoint = Vector2.new(0.5, 0.5)
+  instance12.Position = UDim2.new(v54, 0, 0.5, 0)
+  instance12.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+  instance12.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance12).CornerRadius = UDim.new(1, 0)
+
+  instance19 = Instance.new("TextButton", instance68)
+  instance19.Size = UDim2.new(1, -72, 1, 0)
+  instance19.Position = UDim2.new(0, 58, 0, 0)
+  instance19.BackgroundTransparency = 1
+  instance19.Text = ""
+  instance19.ZIndex = 3
+  instance19.AutoButtonColor = false
+
+  cameraFOV = v9.CameraFOV
+
+  function f5(p22)
+    p22 = math.clamp(math.floor(p22 + 0.5), 1, 120)
+    v9.CameraFOV = p22
+
+    if instance10 then
+      instance10.Text = tostring(p22)
+    end
+
+    local v55 = math.clamp((p22 - 1) / 119, 0, 1)
+
+    if instance11 then
+      instance11.Size = UDim2.new(v55, 0, 1, 0)
+    end
+
+    if instance12 then
+      instance12.Position = UDim2.new(v55, 0, 0.5, 0)
+    end
+  end
+
+  function f6(p23)
+    v9.CameraFOVEnabled = p23 and true or false
+    f4(v39, v40, v9.CameraFOVEnabled)
+    pcall(function() runService:UnbindFromRenderStep("NIEHMU_CamFOV") end)
+
+    if v9.CameraFOVEnabled then
+      pcall(function()
+        runService:BindToRenderStep("NIEHMU_CamFOV", Enum.RenderPriority.Camera.Value + 1, function()
+          if not v14 or not v9.CameraFOVEnabled then
+            return
+          end
+
+          local currentCamera2 = workspace.CurrentCamera
+
+          if currentCamera2 then
+            currentCamera2.FieldOfView = v9.CameraFOV
+          end
+        end)
+      end)
+
+      local currentCamera3 = workspace.CurrentCamera
+
+      if currentCamera3 then
+        currentCamera3.FieldOfView = v9.CameraFOV
+      end
+    else
+      local currentCamera4 = workspace.CurrentCamera
+
+      if currentCamera4 then
+        currentCamera4.FieldOfView = cameraFOV
+      end
+    end
+  end
+
+  instance19.MouseButton1Down:Connect(function()
+    local connect2 = userInputService.InputChanged:Connect(function(input)
+      if input.UserInputType == Enum.UserInputType.MouseMovement then
+        local absolutePosition = instance20.AbsolutePosition
+        local absoluteSize = instance20.AbsoluteSize
+
+        local v56 = math.clamp((input.Position.X - absolutePosition.X)
+          / math.max(absoluteSize.X, 1), 0, 1)
+
+        local v57 = math.clamp(math.floor(1 + v56 * 119 + 0.5), 1, 120)
+        f5(v57)
+
+        if v9.CameraFOVEnabled then
+          local currentCamera5 = workspace.CurrentCamera
+
+          if currentCamera5 then
+            currentCamera5.FieldOfView = v57
+          end
+        end
+      end
+    end)
+
+    local connect3
+
+    connect3 = userInputService.InputEnded:Connect(function(input2)
+      if input2.UserInputType == Enum.UserInputType.MouseButton1 then
+        if connect2 then
+          connect2:Disconnect()
+        end
+
+        if connect3 then
+          connect3:Disconnect()
+        end
+      end
+    end)
+  end)
+
+  v39.Activated:Connect(function() f6(not v9.CameraFOVEnabled) end)
+
+  f2(userInputService.InputBegan, function(p24, p25)
+    if p25 then
+      return
+    end
+
+    if not v9.CameraFOVEnabled then
+      return
+    end
+
+    if p24.KeyCode == Enum.KeyCode.RightBracket or p24.KeyCode == v9.CamFovUpKey then
+      f5(v9.CameraFOV + (v9.CamFovStep or 5))
+      local currentCamera6 = workspace.CurrentCamera
+
+      if currentCamera6 then
+        currentCamera6.FieldOfView = v9.CameraFOV
+      end
+    elseif p24.KeyCode == Enum.KeyCode.LeftBracket or p24.KeyCode == v9.CamFovDownKey then
+      f5(v9.CameraFOV - (v9.CamFovStep or 5))
+      local currentCamera7 = workspace.CurrentCamera
+
+      if currentCamera7 then
+        currentCamera7.FieldOfView = v9.CameraFOV
+      end
+    end
+  end)
+
+  f2(workspace:GetPropertyChangedSignal("CurrentCamera"), function()
+    task.wait(0.1)
+
+    if v9.CameraFOVEnabled then
+      local currentCamera8 = workspace.CurrentCamera
+
+      if currentCamera8 then
+        currentCamera8.FieldOfView = v9.CameraFOV
+      end
+    end
+  end)
+
+  instance15 = Instance.new("Frame", instance3)
+  instance15.Size = UDim2.new(1, 0, 0, 0)
+  instance15.AutomaticSize = Enum.AutomaticSize.Y
+  instance15.BackgroundTransparency = 1
+  instance15.LayoutOrder = 3
+  instance15.Visible = false
+
+  local instance73 = Instance.new("UIListLayout", instance15)
+  instance73.SortOrder = Enum.SortOrder.LayoutOrder
+  instance73.Padding = UDim.new(0, 8)
+
+  f18(instance15, "PLAYERS", 1)
+  v24, v25 = f19(instance15, "ESP", 2, "esp", nil)
+
+  local instance74 = Instance.new("Frame", instance15)
+  instance74.Size = UDim2.new(1, 0, 0, 4)
+  instance74.BackgroundTransparency = 1
+  instance74.LayoutOrder = 2.5
+
+  f18(instance15, "NPC", 3)
+  v26, v27 = f19(instance15, "ESP", 4, "npc_esp", nil)
+  pcall(function() v26.Parent.Size = UDim2.new(1, 0, 0, 46) end)
+
+  local instance75 = Instance.new("Frame", instance15)
+  instance75.Size = UDim2.new(1, 0, 0, 0)
+  instance75.AutomaticSize = Enum.AutomaticSize.Y
+  instance75.BackgroundColor3 = Color3.fromRGB(8, 0, 1)
+  instance75.BackgroundTransparency = 0.45
+  instance75.BorderSizePixel = 0
+  instance75.LayoutOrder = 4.5
+
+  Instance.new("UICorner", instance75).CornerRadius = UDim.new(0, 12)
+
+  local instance76 = Instance.new("UIStroke", instance75)
+  instance76.Color = v16.BorderSoft
+  instance76.Thickness = 1
+  instance76.Transparency = 0.35
+
+  local instance77 = Instance.new("UIPadding", instance75)
+  instance77.PaddingLeft = UDim.new(0, 8)
+  instance77.PaddingRight = UDim.new(0, 8)
+  instance77.PaddingTop = UDim.new(0, 6)
+  instance77.PaddingBottom = UDim.new(0, 6)
+
+  local instance78 = Instance.new("UIListLayout", instance75)
+  instance78.SortOrder = Enum.SortOrder.LayoutOrder
+  instance78.Padding = UDim.new(0, 5)
+
+  local instance79 = Instance.new("TextLabel", instance75)
+  instance79.Size = UDim2.new(1, 0, 0, 16)
+  instance79.BackgroundTransparency = 1
+  instance79.Text = "OPTIONS"
+  instance79.TextColor3 = v16.TextMuted
+  instance79.Font = Enum.Font.GothamBold
+  instance79.TextSize = 9
+  instance79.TextXAlignment = Enum.TextXAlignment.Left
+  instance79.LayoutOrder = 0
+
+  v28, v29 = f19(instance75, "Chams", 1, nil, nil)
+  v30, v31 = f19(instance75, "Distance", 2, nil, nil)
+  v32, v33 = f19(instance75, "Health", 3, nil, nil)
+  v34, v35 = f19(instance75, "Head Image", 4, nil, nil)
+
+  local instance80 = Instance.new("Frame", instance75)
+  instance80.Size = UDim2.new(1, -8, 0, 36)
+  instance80.BackgroundColor3 = Color3.fromRGB(12, 0, 2)
+  instance80.BackgroundTransparency = 0.15
+  instance80.BorderSizePixel = 0
+  instance80.LayoutOrder = 1.5
+  instance80.ClipsDescendants = false
+
+  Instance.new("UICorner", instance80).CornerRadius = UDim.new(0, 10)
+
+  local instance81 = Instance.new("UIStroke", instance80)
+  instance81.Color = v16.BorderSoft
+  instance81.Thickness = 1
+  instance81.Transparency = 0.55
+
+  local v58 = { BackgroundColor3 = v10.Chams.Fill }
+
+  local npcHueTrack = Instance.new("Frame", instance80)
+  npcHueTrack.Name = "NpcHueTrack"
+  npcHueTrack.Size = UDim2.new(1, -20, 0, 14)
+  npcHueTrack.Position = UDim2.new(0, 10, 0.5, -7)
+  npcHueTrack.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+  npcHueTrack.BorderSizePixel = 0
+  npcHueTrack.ZIndex = 2
+
+  Instance.new("UICorner", npcHueTrack).CornerRadius = UDim.new(1, 0)
+
+  local instance82 = Instance.new("UIGradient", npcHueTrack)
+
+  instance82.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+    ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 255, 0)),
+    ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
+    ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0, 0, 255)),
+    ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+  })
+
+  local instance83 = Instance.new("UIStroke", npcHueTrack)
+  instance83.Color = Color3.fromRGB(120, 18, 28)
+  instance83.Thickness = 1
+  instance83.Transparency = 0.4
+
+  local npcHueKnob = Instance.new("Frame", npcHueTrack)
+  npcHueKnob.Name = "NpcHueKnob"
+  npcHueKnob.Size = UDim2.fromOffset(18, 18)
+  npcHueKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+  npcHueKnob.Position = UDim2.new(0, 0, 0.5, 0)
+  npcHueKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+  npcHueKnob.BorderSizePixel = 0
+  npcHueKnob.ZIndex = 4
+
+  Instance.new("UICorner", npcHueKnob).CornerRadius = UDim.new(1, 0)
+
+  local instance84 = Instance.new("UIStroke", npcHueKnob)
+  instance84.Color = Color3.fromRGB(20, 0, 2)
+  instance84.Thickness = 1.6
+  instance84.Transparency = 0.1
+
+  local instance85 = Instance.new("Frame", npcHueKnob)
+  instance85.AnchorPoint = Vector2.new(0.5, 0.5)
+  instance85.Position = UDim2.new(0.5, 0, 0.5, 0)
+  instance85.Size = UDim2.fromOffset(10, 10)
+  instance85.BackgroundColor3 = v10.Chams.Fill
+  instance85.BorderSizePixel = 0
+  instance85.ZIndex = 5
+
+  Instance.new("UICorner", instance85).CornerRadius = UDim.new(1, 0)
+
+  local npcHueHit = Instance.new("TextButton", instance80)
+  npcHueHit.Name = "NpcHueHit"
+  npcHueHit.Size = UDim2.new(1, -16, 1, 0)
+  npcHueHit.Position = UDim2.new(0, 8, 0, 0)
+  npcHueHit.BackgroundTransparency = 1
+  npcHueHit.Text = ""
+  npcHueHit.ZIndex = 6
+  npcHueHit.AutoButtonColor = false
+  npcHueHit.Active = true
+
+  local function f21(p26)
+    if not p26 or p26 == "" then
+      return nil
+    end
+
+    local gsub = tostring(p26):gsub("%s+", "")
+    local xXXXXX = gsub:match("^#?(%x%x%x%x%x%x)$")
+
+    if xXXXXX then
+      local v59 = tonumber(xXXXXX, 16)
+
+      if v59 then
+        return Color3.fromRGB(
+          math.floor(v59 / 65536) % 256, math.floor(v59 / 256) % 256, v59 % 256
+        )
+      end
+    end
+
+    local v60, v61, v62 = gsub:match("^(%d+),(%d+),(%d+)$")
+
+    if v60 and v61 and v62 then
+      return Color3.fromRGB(
+        math.clamp(tonumber(v60) or 0, 0, 255), math.clamp(tonumber(v61) or 0, 0, 255),
+        math.clamp(tonumber(v62) or 0, 0, 255)
+      )
+    end
+
+    return nil
+  end
+
+  function f7(p27, p28)
+    if typeof(p27) ~= "Color3" then
+      return
+    end
+
+    v10.Chams.Fill = p27
+    local v63, v64, v65 = Color3.toHSV(p27)
+
+    v10.Chams.Outline = Color3.fromHSV(
+      v63, math.clamp(v64 * 0.7, 0, 1), math.clamp(v65 + 0.25, 0, 1)
+    )
+
+    if instance85 then
+      instance85.BackgroundColor3 = p27
+    end
+
+    local v66 = math.floor(p27.R * 255 + 0.5)
+    local v67 = math.floor(p27.G * 255 + 0.5)
+    local v68 = math.floor(p27.B * 255 + 0.5)
+
+    if not p28 and npcHueKnob then
+      npcHueKnob.Position = UDim2.new(v63, 0, 0.5, 0)
+    end
+  end
+
+  local function f22(p29)
+    local absolutePosition2 = npcHueTrack.AbsolutePosition
+    local absoluteSize2 = npcHueTrack.AbsoluteSize
+
+    if absoluteSize2.X <= 1 then
+      return
+    end
+
+    local v69 = math.clamp((p29 - absolutePosition2.X) / absoluteSize2.X, 0, 1)
+    npcHueKnob.Position = UDim2.new(v69, 0, 0.5, 0)
+    f7(Color3.fromHSV(v69, 0.95, 0.92), true)
+  end
+
+  local v70 = false
+
+  npcHueHit.MouseButton1Down:Connect(function()
+    v70 = true
+    local getMouseLocation = userInputService:GetMouseLocation()
+    local getGuiInset = guiService:GetGuiInset()
+    f22(getMouseLocation.X - getGuiInset.X)
+  end)
+
+  f2(userInputService.InputChanged, function(p30)
+    if not v70 then
+      return
+    end
+
+    if p30.UserInputType == Enum.UserInputType.MouseMovement
+      or p30.UserInputType == Enum.UserInputType.Touch then
+      f22(p30.Position.X)
+    end
+  end)
+
+  f2(userInputService.InputEnded, function(p31)
+    if p31.UserInputType == Enum.UserInputType.MouseButton1
+      or p31.UserInputType == Enum.UserInputType.Touch then
+      v70 = false
+    end
+  end)
+
+  do
+    local color = Color3.toHSV(v10.Chams.Fill)
+    npcHueKnob.Position = UDim2.new(color, 0, 0.5, 0)
+  end
+
+  f7(v10.Chams.Fill)
+
+  local instance86 = Instance.new("Frame", instance15)
+  instance86.Size = UDim2.new(1, 0, 0, 0)
+  instance86.Visible = false
+  instance86.BackgroundTransparency = 1
+  instance86.BorderSizePixel = 0
+  instance86.LayoutOrder = 6
+
+  Instance.new("UICorner", instance86).CornerRadius = UDim.new(0, 12)
+
+  local instance87 = Instance.new("UIStroke", instance86)
+  instance87.Color = v16.BorderSoft
+  instance87.Thickness = 1
+  instance87.Transparency = 0.5
+
+  local instance88 = Instance.new("TextBox", instance86)
+  instance88.Size = UDim2.new(1, -90, 0, 26)
+  instance88.Position = UDim2.new(0, 12, 0.5, -13)
+  instance88.BackgroundColor3 = v16.Off
+  instance88.BackgroundTransparency = 0.12
+  instance88.PlaceholderText = "RGB 140,8,18  or  #8C0812"
+  instance88.PlaceholderColor3 = v16.TextMuted
+  instance88.Text = ""
+  instance88.TextColor3 = v16.Text
+  instance88.Font = Enum.Font.GothamBold
+  instance88.TextSize = 11
+  instance88.ClearTextOnFocus = false
+
+  Instance.new("UICorner", instance88).CornerRadius = UDim.new(0, 6)
+  Instance.new("UIStroke", instance88).Color = v16.BorderSoft
+
+  instance88:FindFirstChildOfClass("UIStroke").Thickness = 1
+  instance88:FindFirstChildOfClass("UIStroke").Transparency = 0.5
+
+  local instance89 = Instance.new("TextButton", instance86)
+  instance89.Size = UDim2.new(0, 68, 0, 26)
+  instance89.Position = UDim2.new(1, -78, 0.5, -13)
+  instance89.BackgroundColor3 = v16.Accent
+  instance89.BackgroundTransparency = 0.08
+  instance89.Text = "Apply"
+  instance89.TextColor3 = Color3.fromRGB(255, 245, 245)
+  instance89.Font = Enum.Font.GothamBold
+  instance89.TextSize = 11
+  instance89.AutoButtonColor = false
+
+  Instance.new("UICorner", instance89).CornerRadius = UDim.new(0, 6)
+
+  instance89.Activated:Connect(function()
+    local v71 = f21(instance88.Text)
+
+    if v71 then
+      f7(v71)
+      instance88.TextColor3 = v16.Text
+    else
+      instance88.TextColor3 = Color3.fromRGB(255, 120, 120)
+    end
+  end)
+
+  local instance90 = Instance.new("Frame", instance15)
+  instance90.Size = UDim2.new(1, 0, 0, 148)
+  instance90.BackgroundColor3 = Color3.fromRGB(9, 0, 1)
+  instance90.BackgroundTransparency = 0.04
+  instance90.BorderSizePixel = 0
+  instance90.LayoutOrder = 7
+
+  Instance.new("UICorner", instance90).CornerRadius = UDim.new(0, 14)
+
+  local instance91 = Instance.new("UIStroke", instance90)
+  instance91.Color = Color3.fromRGB(130, 10, 20)
+  instance91.Thickness = 1.2
+  instance91.Transparency = 0.42
+
+  local instance92 = Instance.new("TextLabel", instance90)
+  instance92.Size = UDim2.new(0, 90, 0, 14)
+  instance92.Position = UDim2.new(0, 14, 0, 8)
+  instance92.BackgroundTransparency = 1
+  instance92.Text = "ImageURL"
+  instance92.TextColor3 = Color3.fromRGB(220, 180, 185)
+  instance92.Font = Enum.Font.GothamBlack
+  instance92.TextSize = 11
+  instance92.TextXAlignment = Enum.TextXAlignment.Left
+
+  instance22 = Instance.new("ImageLabel", instance90)
+  instance22.Size = UDim2.fromOffset(42, 42)
+  instance22.Position = UDim2.new(1, -56, 0, 8)
+  instance22.BackgroundColor3 = Color3.fromRGB(14, 1, 2)
+  instance22.BackgroundTransparency = 0
+  instance22.Image = ""
+  instance22.ScaleType = Enum.ScaleType.Fit
+  instance22.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance22).CornerRadius = UDim.new(0, 10)
+
+  local instance93 = Instance.new("UIStroke", instance22)
+  instance93.Color = Color3.fromRGB(160, 12, 22)
+  instance93.Thickness = 1.2
+  instance93.Transparency = 0.3
+
+  instance24 = Instance.new("TextLabel", instance22)
+  instance24.Size = UDim2.new(1, 0, 1, 0)
+  instance24.BackgroundTransparency = 1
+  instance24.Text = "IMG"
+  instance24.TextColor3 = v16.TextMuted
+  instance24.Font = Enum.Font.GothamBold
+  instance24.TextSize = 9
+  instance24.TextXAlignment = Enum.TextXAlignment.Center
+  instance24.ZIndex = 2
+
+  local instance94 = Instance.new("Frame", instance90)
+  instance94.Size = UDim2.new(1, -72, 0, 30)
+  instance94.Position = UDim2.new(0, 14, 0, 26)
+  instance94.BackgroundTransparency = 1
+  instance94.BorderSizePixel = 0
+  instance94.ClipsDescendants = true
+
+  instance21 = Instance.new("TextBox", instance94)
+  instance21.Size = UDim2.new(1, 0, 1, 0)
+  instance21.Position = UDim2.new(0, 0, 0, 0)
+  instance21.BackgroundColor3 = Color3.fromRGB(12, 0, 2)
+  instance21.BackgroundTransparency = 0
+  instance21.PlaceholderText = "rbxassetid://  ·  https://..."
+  instance21.PlaceholderColor3 = v16.TextMuted
+  instance21.Text = ""
+  instance21.TextColor3 = Color3.fromRGB(255, 255, 255)
+  instance21.Font = Enum.Font.Gotham
+  instance21.TextSize = 11
+  instance21.ClearTextOnFocus = false
+  instance21.TextXAlignment = Enum.TextXAlignment.Left
+  instance21.TextTruncate = Enum.TextTruncate.AtEnd
+  instance21.ClipsDescendants = true
+
+  Instance.new("UICorner", instance21).CornerRadius = UDim.new(0, 8)
+
+  local instance95 = Instance.new("UIStroke", instance21)
+  instance95.Color = Color3.fromRGB(80, 8, 12)
+  instance95.Thickness = 1
+  instance95.Transparency = 0.35
+
+  instance21.Focused:Connect(function()
+    tweenService:Create(instance95, tweenInfo3, { Color = v16.AccentGlow, Transparency = 0.1 }):Play()
+  end)
+
+  instance21.FocusLost:Connect(function()
+    tweenService:Create(instance95, tweenInfo3, {
+      Color = Color3.fromRGB(80, 8, 12),
+      Transparency = 0.35,
+    }):Play()
+  end)
+
+  instance9 = Instance.new("TextButton", instance94)
+  instance9.Visible = false
+  instance9.Size = UDim2.fromOffset(0, 0)
+  instance9.Position = UDim2.new(1, 0, 0, 0)
+  instance9.AnchorPoint = Vector2.new(0, 0)
+  instance9.BackgroundColor3 = v16.Accent
+  instance9.BackgroundTransparency = 0.04
+  instance9.Text = "SET"
+  instance9.TextColor3 = Color3.fromRGB(255, 250, 250)
+  instance9.Font = Enum.Font.GothamBlack
+  instance9.TextSize = 11
+  instance9.AutoButtonColor = false
+
+  Instance.new("UICorner", instance9).CornerRadius = UDim.new(0, 8)
+
+  local instance96 = Instance.new("UIStroke", instance9)
+  instance96.Color = Color3.fromRGB(220, 25, 40)
+  instance96.Thickness = 1
+  instance96.Transparency = 0.3
+
+  instance9.MouseEnter:Connect(function()
+    tweenService:Create(instance9, tweenInfo2, { BackgroundColor3 = v16.AccentGlow }):Play()
+  end)
+
+  instance9.MouseLeave:Connect(function()
+    tweenService:Create(instance9, tweenInfo2, { BackgroundColor3 = v16.Accent }):Play()
+  end)
+
+  instance23 = Instance.new("TextLabel", instance90)
+  instance23.Size = UDim2.new(1, -28, 0, 14)
+  instance23.Position = UDim2.new(0, 14, 0, 60)
+  instance23.BackgroundTransparency = 1
+  instance23.Text = "asset id · rbxassetid · http(s)"
+  instance23.TextColor3 = v16.TextMuted
+  instance23.Font = Enum.Font.Gotham
+  instance23.TextSize = 9
+  instance23.TextXAlignment = Enum.TextXAlignment.Left
+
+  local instance97 = Instance.new("Frame", instance90)
+  instance97.Size = UDim2.new(1, -28, 0, 44)
+  instance97.Position = UDim2.new(0, 14, 0, 78)
+  instance97.BackgroundColor3 = Color3.fromRGB(12, 0, 2)
+  instance97.BackgroundTransparency = 0
+  instance97.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance97).CornerRadius = UDim.new(0, 10)
+
+  local instance98 = Instance.new("UIStroke", instance97)
+  instance98.Color = v16.BorderSoft
+  instance98.Thickness = 1
+  instance98.Transparency = 0.45
+
+  local instance99 = Instance.new("TextLabel", instance97)
+  instance99.Visible = false
+  instance99.Size = UDim2.fromOffset(0, 0)
+  instance99.BackgroundTransparency = 1
+  instance99.Text = ""
+
+  instance25 = Instance.new("TextLabel", instance97)
+  instance25.Size = UDim2.new(0, 46, 0, 24)
+  instance25.Position = UDim2.new(0, 8, 0.5, -4)
+  instance25.BackgroundColor3 = Color3.fromRGB(20, 1, 3)
+  instance25.BackgroundTransparency = 0
+  instance25.Text = "28px"
+  instance25.TextColor3 = v16.AccentGlow
+  instance25.Font = Enum.Font.GothamBlack
+  instance25.TextSize = 12
+  instance25.TextXAlignment = Enum.TextXAlignment.Center
+
+  Instance.new("UICorner", instance25).CornerRadius = UDim.new(0, 7)
+
+  local instance100 = Instance.new("UIStroke", instance25)
+  instance100.Color = v16.AccentSoft
+  instance100.Thickness = 1
+  instance100.Transparency = 0.5
+
+  instance28 = Instance.new("Frame", instance97)
+  instance28.Size = UDim2.new(1, -72, 0, 5)
+  instance28.Position = UDim2.new(0, 60, 0.5, 4)
+  instance28.BackgroundColor3 = v16.Off
+  instance28.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance28).CornerRadius = UDim.new(1, 0)
+
+  local instance101 = Instance.new("UIStroke", instance28)
+  instance101.Color = v16.BorderSoft
+  instance101.Thickness = 1
+  instance101.Transparency = 0.6
+
+  instance26 = Instance.new("Frame", instance28)
+  instance26.Size = UDim2.new(0.0684931506849315, 0, 1, 0)
+  instance26.BackgroundColor3 = v16.Accent
+  instance26.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance26).CornerRadius = UDim.new(1, 0)
+
+  instance27 = Instance.new("Frame", instance28)
+  instance27.Size = UDim2.fromOffset(14, 14)
+  instance27.AnchorPoint = Vector2.new(0.5, 0.5)
+  instance27.Position = UDim2.new(0.0684931506849315, 0, 0.5, 0)
+  instance27.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+  instance27.BorderSizePixel = 0
+
+  Instance.new("UICorner", instance27).CornerRadius = UDim.new(1, 0)
+
+  local instance102 = Instance.new("UIStroke", instance27)
+  instance102.Color = v16.AccentSoft
+  instance102.Thickness = 1.5
+  instance102.Transparency = 0.2
+
+  local instance103 = Instance.new("TextButton", instance97)
+  instance103.Size = UDim2.new(1, -60, 1, 0)
+  instance103.Position = UDim2.new(0, 58, 0, 0)
+  instance103.BackgroundTransparency = 1
+  instance103.Text = ""
+  instance103.ZIndex = 3
+  instance103.AutoButtonColor = false
+
+  function f8(p32)
+    p32 = math.clamp(math.floor(p32 + 0.5), 8, 300)
+    v10.HeadImage.Size = p32
+    instance25.Text = p32 .. "px"
+    local v72 = (p32 - 8) / 292
+    instance26.Size = UDim2.new(v72, 0, 1, 0)
+    instance27.Position = UDim2.new(v72, 0, 0.5, 0)
+  end
+
+  f8(v10.HeadImage.Size or 28)
+
+  instance103.MouseButton1Down:Connect(function()
+    local connect4 = userInputService.InputChanged:Connect(function(input3)
+      if input3.UserInputType == Enum.UserInputType.MouseMovement
+        or input3.UserInputType == Enum.UserInputType.Touch then
+        local absolutePosition3 = instance28.AbsolutePosition
+        local absoluteSize3 = instance28.AbsoluteSize
+
+        f8(8 + math.clamp(
+          (input3.Position.X - absolutePosition3.X) / math.max(absoluteSize3.X, 1), 0, 1
+        ) * 292)
+      end
+    end)
+
+    local connect5
+
+    connect5 = userInputService.InputEnded:Connect(function(input4)
+      if input4.UserInputType == Enum.UserInputType.MouseButton1
+        or input4.UserInputType == Enum.UserInputType.Touch then
+        if connect4 then
+          connect4:Disconnect()
+        end
+
+        if connect5 then
+          connect5:Disconnect()
+        end
+      end
+    end)
+  end)
+
+  local function f23(gsub2)
+    if not gsub2 or gsub2 == "" then
+      return ""
+    end
+
+    gsub2 = tostring(gsub2):gsub("^%s+", ""):gsub("%s+$", "")
+
+    if tonumber(gsub2) then
+      return "rbxassetid://" .. gsub2
+    end
+
+    if gsub2:sub(1, 13) == "rbxassetid://" or gsub2:sub(1, 11) == "rbxasset://" then
+      return gsub2
+    end
+
+    if gsub2:sub(1, 7) == "http://" or gsub2:sub(1, 8) == "https://" then
+      if type(getcustomasset) == "function" and type(writefile) == "function" then
+        local v73, v74 = pcall(function() return game:HttpGet(gsub2) end)
+
+        if v73 and v74 and #v74 > 32 then
+          local v75 = "niehmu_npc_head_" .. tostring(math.floor(tick() * 1000) % 100000)
+            .. ".png"
+
+          pcall(function() writefile(v75, v74) end)
+          local v76 = getcustomasset(v75)
+
+          if v76 then
+            return v76
+          end
+        end
+      end
+
+      return gsub2
+    end
+
+    return gsub2
+  end
+
+  local count = 0
+  local v77 = nil
+
+  local function f24(p33)
+    if not p33 then
+      return false
+    end
+
+    local gsub3 = tostring(p33):gsub("^%s+", ""):gsub("%s+$", "")
+
+    if gsub3 == "" then
+      return true
+    end
+
+    if tonumber(gsub3) then
+      return true
+    end
+
+    if gsub3:sub(1, 13) == "rbxassetid://" and #gsub3 > 14 then
+      return true
+    end
+
+    if gsub3:sub(1, 11) == "rbxasset://" and #gsub3 > 12 then
+      return true
+    end
+
+    if (gsub3:sub(1, 8) == "https://" or gsub3:sub(1, 7) == "http://") and #gsub3 >= 14 then
+      return true
+    end
+
+    return false
+  end
+
+  local connect6, connect7
+
+  local function f25()
+    local text4 = instance21.Text or ""
+
+    if not f24(text4) then
+      return
+    end
+
+    local gsub4 = tostring(text4):gsub("^%s+", ""):gsub("%s+$", "")
+
+    if gsub4 == v77 then
+      return
+    end
+
+    count = count + 1
+    local v78 = count
+
+    if connect6 then
+      pcall(function() connect6:Disconnect() end)
+    end
+
+    if connect7 then
+      pcall(function() connect7:Disconnect() end)
+    end
+
+    local v79 = f23(gsub4)
+
+    if v78 ~= count then
+      return
+    end
+
+    v10.HeadImage.Image = v79 or ""
+    v77 = gsub4
+
+    if v79 == "" then
+      instance22.Image = ""
+      instance24.Visible = true
+
+      instance23.Visible = true
+      instance23.Text = ""
+      instance23.TextColor3 = v16.TextMuted
+
+      return
+    end
+
+    instance23.Visible = true
+    instance23.Text = "…"
+    instance23.TextColor3 = Color3.fromRGB(200, 160, 50)
+
+    instance24.Visible = false
+    instance22.Image = ""
+
+    connect6 = instance22:GetPropertyChangedSignal("IsLoaded"):Connect(function()
+      if v78 ~= count then
+        return
+      end
+
+      if instance22.IsLoaded and instance22.Image ~= "" then
+        instance23.Text = "ok"
+        instance23.TextColor3 = Color3.fromRGB(100, 220, 130)
+
+        instance24.Visible = false
+
+        if connect6 then
+          connect6:Disconnect()
+        end
+
+        if connect7 then
+          connect7:Disconnect()
+        end
+
+        pcall(function()
+          if v10.Enabled then
+            for key2, value5 in pairs(v43 or {}) do
+              if value5.headImg then
+                value5.headImg.Image = ""
+                value5.headImg.Image = v10.HeadImage.Image or ""
+              end
+            end
+          end
+        end)
+      end
+    end)
+
+    connect7 = instance22.ContentImageFailed:Connect(function()
+      if v78 ~= count then
+        return
+      end
+
+      instance23.Text = "failed"
+      instance23.TextColor3 = Color3.fromRGB(240, 80, 80)
+
+      instance24.Visible = true
+
+      if connect6 then
+        connect6:Disconnect()
+      end
+
+      if connect7 then
+        connect7:Disconnect()
+      end
+    end)
+
+    task.defer(function()
+      if v78 ~= count then
+        return
+      end
+
+      instance22.Image = v10.HeadImage.Image
+    end)
+  end
+
+  do
+    local count2 = 0
+
+    instance21:GetPropertyChangedSignal("Text"):Connect(function()
+      count2 = count2 + 1
+      local v80 = count2
+
+      task.delay(0.5, function()
+        if v80 ~= count2 then
+          return
+        end
+
+        f25()
+      end)
+    end)
+
+    instance21.FocusLost:Connect(function() f25() end)
+  end
+
+  instance16 = Instance.new("Frame", instance3)
+  instance16.Size = UDim2.new(1, 0, 0, 0)
+  instance16.AutomaticSize = Enum.AutomaticSize.Y
+  instance16.BackgroundTransparency = 1
+  instance16.LayoutOrder = 4
+  instance16.Visible = false
+
+  local instance104 = Instance.new("UIListLayout", instance16)
+  instance104.SortOrder = Enum.SortOrder.LayoutOrder
+  instance104.Padding = UDim.new(0, 8)
+
+  f18(instance16, "KEYBINDS", 1)
+
+  local instance105 = Instance.new("Frame", instance16)
+  instance105.Size = UDim2.new(1, 0, 0, 44)
+  instance105.BackgroundColor3 = v16.Row
+  instance105.BackgroundTransparency = 0.14
+  instance105.BorderSizePixel = 0
+  instance105.LayoutOrder = 2
+
+  Instance.new("UICorner", instance105).CornerRadius = UDim.new(0, 12)
+
+  local instance106 = Instance.new("UIStroke", instance105)
+  instance106.Color = v16.BorderSoft
+  instance106.Thickness = 1
+  instance106.Transparency = 0.65
+
+  local instance107 = Instance.new("TextLabel", instance105)
+  instance107.Size = UDim2.new(1, -70, 1, 0)
+  instance107.Position = UDim2.new(0, 16, 0, 0)
+  instance107.BackgroundTransparency = 1
+  instance107.Text = "Open panel"
+  instance107.TextColor3 = v16.Text
+  instance107.Font = Enum.Font.GothamBold
+  instance107.TextSize = 13
+  instance107.TextXAlignment = Enum.TextXAlignment.Left
+
+  local instance108 = Instance.new("TextButton", instance105)
+  instance108.Size = UDim2.new(0, 42, 0, 22)
+  instance108.Position = UDim2.new(1, -54, 0.5, -11)
+  instance108.BackgroundColor3 = v16.Off
+  instance108.BackgroundTransparency = 0.15
+  instance108.Text = f3(Enum.KeyCode.Home)
+  instance108.TextColor3 = v16.TextMuted
+  instance108.Font = Enum.Font.GothamBold
+  instance108.TextSize = 10
+  instance108.AutoButtonColor = false
+
+  Instance.new("UICorner", instance108).CornerRadius = UDim.new(0, 6)
+
+  v18.toggle_panel = {
+    key = Enum.KeyCode.Home,
+    btn = instance108,
+    callback = function() frame.Visible = not frame.Visible end,
+  }
+
+  instance108.Activated:Connect(function()
+    if v19 == "toggle_panel" then
+      v19 = nil
+
+      instance108.Text = f3(v18.toggle_panel.key)
+      instance108.TextColor3 = v16.TextMuted
+      instance108.BackgroundColor3 = v16.Off
+    else
+      v19 = "toggle_panel"
+      instance108.Text = "..."
+      instance108.TextColor3 = v16.Accent
+    end
+  end)
+
+  local instance109 = Instance.new("Frame", instance16)
+  instance109.Size = UDim2.new(1, 0, 0, 44)
+  instance109.BackgroundColor3 = v16.Row
+  instance109.BackgroundTransparency = 0.14
+  instance109.BorderSizePixel = 0
+  instance109.LayoutOrder = 3
+
+  Instance.new("UICorner", instance109).CornerRadius = UDim.new(0, 12)
+
+  local instance110 = Instance.new("UIStroke", instance109)
+  instance110.Color = v16.BorderSoft
+  instance110.Thickness = 1
+  instance110.Transparency = 0.65
+
+  local instance111 = Instance.new("TextLabel", instance109)
+  instance111.Size = UDim2.new(1, -70, 1, 0)
+  instance111.Position = UDim2.new(0, 16, 0, 0)
+  instance111.BackgroundTransparency = 1
+  instance111.Text = "CutDown panel"
+  instance111.TextColor3 = v16.Text
+  instance111.Font = Enum.Font.GothamBold
+  instance111.TextSize = 13
+  instance111.TextXAlignment = Enum.TextXAlignment.Left
+
+  local instance112 = Instance.new("TextButton", instance109)
+  instance112.Size = UDim2.new(0, 42, 0, 22)
+  instance112.Position = UDim2.new(1, -54, 0.5, -11)
+  instance112.BackgroundColor3 = v16.Off
+  instance112.BackgroundTransparency = 0.15
+  instance112.Text = f3(v9.MinimizeKey)
+  instance112.TextColor3 = v16.TextMuted
+  instance112.Font = Enum.Font.GothamBold
+  instance112.TextSize = 10
+  instance112.AutoButtonColor = false
+
+  Instance.new("UICorner", instance112).CornerRadius = UDim.new(0, 6)
+
+  local function f26(p34)
+    v42 = p34 and true or false
+
+    if v42 then
+      tweenService:Create(frame, tweenInfo4, { Size = UDim2.new(0, 332, 0, 48) }):Play()
+      instance.Visible = false
+      instance2.Visible = false
+
+      if instance4 then
+        instance4.Visible = false
+      end
+    else
+      instance.Visible = true
+      instance2.Visible = true
+
+      if instance4 then
+        instance4.Visible = true
+      end
+
+      tweenService:Create(frame, tweenInfo4, { Size = UDim2.new(0, 332, 0, 458) }):Play()
+    end
+  end
+
+  v18.minimize_panel = {
+    key = v9.MinimizeKey,
+    btn = instance112,
+    callback = function() f26(not v42) end,
+  }
+
+  instance112.Activated:Connect(function()
+    if v19 == "minimize_panel" then
+      v19 = nil
+
+      instance112.Text = f3(v18.minimize_panel.key)
+      instance112.TextColor3 = v16.TextMuted
+      instance112.BackgroundColor3 = v16.Off
+    else
+      v19 = "minimize_panel"
+      instance112.Text = "..."
+      instance112.TextColor3 = v16.Accent
+    end
+  end)
+
+  f18(instance16, "SYSTEME", 4)
+  v38 = nil
+  v36 = f20(instance16, "Disable All Modules", 5, true)
+  v37 = {}
+
+  do
+    v37.Switch, v37.Knob = f19(instance16, "Streamproof", 6, "streamproof", Enum.KeyCode.F2)
+
+    local instance113 = Instance.new("Frame", instance16)
+    instance113.Size = UDim2.new(1, 0, 0, 0)
+    instance113.AutomaticSize = Enum.AutomaticSize.Y
+    instance113.BackgroundColor3 = Color3.fromRGB(8, 0, 1)
+    instance113.BackgroundTransparency = 0.4
+    instance113.BorderSizePixel = 0
+    instance113.LayoutOrder = 7
+
+    Instance.new("UICorner", instance113).CornerRadius = UDim.new(0, 12)
+
+    local instance114 = Instance.new("UIStroke", instance113)
+    instance114.Color = v16.BorderSoft
+    instance114.Thickness = 1
+    instance114.Transparency = 0.35
+
+    local instance115 = Instance.new("UIPadding", instance113)
+    instance115.PaddingLeft = UDim.new(0, 8)
+    instance115.PaddingRight = UDim.new(0, 8)
+    instance115.PaddingTop = UDim.new(0, 6)
+    instance115.PaddingBottom = UDim.new(0, 6)
+
+    local instance116 = Instance.new("UIListLayout", instance113)
+    instance116.SortOrder = Enum.SortOrder.LayoutOrder
+    instance116.Padding = UDim.new(0, 5)
+
+    local instance117 = Instance.new("TextLabel", instance113)
+    instance117.Size = UDim2.new(1, 0, 0, 16)
+    instance117.BackgroundTransparency = 1
+    instance117.Text = "OPTIONS"
+    instance117.TextColor3 = v16.TextMuted
+    instance117.Font = Enum.Font.GothamBold
+    instance117.TextSize = 9
+    instance117.TextXAlignment = Enum.TextXAlignment.Left
+    instance117.LayoutOrder = 0
+
+    v37.OthersBtn = f20(instance113, "Other players : ON", 1, false)
+    v37.LocalBtn = f20(instance113, "My pseudo : ON", 2, false)
+
+    local instance118 = Instance.new("Frame", instance16)
+    instance118.Size = UDim2.new(1, 0, 0, 76)
+    instance118.BackgroundColor3 = v16.Row
+    instance118.BackgroundTransparency = 0.08
+    instance118.BorderSizePixel = 0
+    instance118.LayoutOrder = 8
+
+    Instance.new("UICorner", instance118).CornerRadius = UDim.new(0, 12)
+
+    local instance119 = Instance.new("UIStroke", instance118)
+    instance119.Color = v16.BorderSoft
+    instance119.Thickness = 1
+    instance119.Transparency = 0.5
+
+    local instance120 = Instance.new("TextLabel", instance118)
+    instance120.Size = UDim2.new(1, -20, 0, 16)
+    instance120.Position = UDim2.new(0, 12, 0, 6)
+    instance120.BackgroundTransparency = 1
+    instance120.Text = "NAMETAG TEXT"
+    instance120.TextColor3 = v16.TextDim
+    instance120.Font = Enum.Font.GothamBold
+    instance120.TextSize = 10
+    instance120.TextXAlignment = Enum.TextXAlignment.Left
+
+    v37.TextBox = Instance.new("TextBox", instance118)
+
+    local textBox = v37.TextBox
+    textBox.Size = UDim2.new(1, -24, 0, 30)
+    textBox.Position = UDim2.new(0, 12, 0, 26)
+    textBox.BackgroundColor3 = Color3.fromRGB(10, 0, 1)
+    textBox.BackgroundTransparency = 0.08
+    textBox.PlaceholderText = "Texte au centre du pseudo"
+    textBox.PlaceholderColor3 = v16.TextMuted
+    textBox.Text = ""
+    textBox.TextColor3 = v16.Text
+    textBox.Font = Enum.Font.GothamBold
+    textBox.TextSize = 12
+    textBox.ClearTextOnFocus = false
+
+    Instance.new("UICorner", textBox).CornerRadius = UDim.new(0, 8)
+
+    local instance121 = Instance.new("UIStroke", textBox)
+    instance121.Color = v16.AccentSoft
+    instance121.Thickness = 1
+    instance121.Transparency = 0.45
+
+    v37.ApplyBtn = f20(instance16, "Valider Streamproof", 9, true)
+  end
+
+  local v81 = {
+    AIM = instance14,
+    AUTO = instance13,
+    ESP = instance15,
+    MISC = instance16,
+  }
+
+  local tweenInfo9 = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+  local tweenInfo10 = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+
+  local function f27(p35)
+    f17(p35)
+    local v82 = nil
+
+    for key3, value6 in pairs(v81) do
+      if value6.Visible and key3 ~= p35 then
+        v82 = value6
+      end
+    end
+
+    if v82 then
+      tweenService:Create(v82, tweenInfo10, { BackgroundTransparency = 1 }):Play()
+
+      task.delay(0.1, function()
+        v82.Visible = false
+        v82.BackgroundTransparency = 1
+      end)
+    end
+
+    local v83 = v81[p35]
+
+    if v83 then
+      v83.BackgroundTransparency = 1
+      v83.Visible = true
+
+      tweenService:Create(v83, tweenInfo9, { BackgroundTransparency = 1 }):Play()
+      pcall(function() instance3.CanvasPosition = Vector2.new(0, 0) end)
+    end
+  end
+
+  for key4, value7 in pairs(v49) do
+    value7.Activated:Connect(function() f27(key4) end)
+  end
+
+  f27("AUTO")
+  v42 = false
+  instance17.Activated:Connect(function() f26(not v42) end)
+
+  instance18.Activated:Connect(function()
+    v14 = false
+    v12 = false
+    v13 = nil
+    v9.ESPEnabled = false
+    v10.Enabled = false
+    v9.CameraFOVEnabled = false
+    v11.Enabled = false
+
+    for index4, value8 in ipairs(v15) do
+    end
+
+    pcall(function()
+      local currentCamera9 = workspace.CurrentCamera
+
+      if currentCamera9 then
+        currentCamera9.FieldOfView = cameraFOV
+      end
+    end)
+
+    pcall(function()
+      for index5, value9 in ipairs(workspace:GetDescendants()) do
+        if value9:IsA("Highlight") and value9.Name == "NIEHMU_NpcESP" then
+          value9:Destroy()
+        end
+      end
+    end)
+
+    pcall(function()
+      if niehmuPanel4 then
+        niehmuPanel4:Destroy()
+      end
+    end)
+
+    pcall(function()
+      if niehmuStats then
+        niehmuStats:Destroy()
+      end
+    end)
+
+    pcall(function()
+      _G.NIEHMU_StatsRegisterKill = nil
+
+      if v4 then
+        function v4.RegisterKill()
+        end
+
+        v4.Ready = false
+      end
+    end)
+
+    print("[NIEHMU] closed")
+  end)
+
+  niehmuESP = Instance.new("Folder")
+  niehmuESP.Name = "NIEHMU_ESP"
+  niehmuESP.Parent = niehmuPanel4
+
+  v41 = {}
+
+  function f12(p36)
+    local v84 = v41[p36]
+
+    if not v84 then
+      return
+    end
+
+    for key5, value10 in pairs(v84) do
+      if typeof(value10) == "Instance" then
+        pcall(function() value10:Destroy() end)
+      end
+    end
+
+    v41[p36] = nil
+  end
+
+  function f9()
+    for key6 in pairs(v41) do
+      f12(key6)
+    end
+  end
+
+  function f11(p37)
+    if p37 == localPlayer then
+      return
+    end
+
+    local character = p37.Character
+
+    if not character then
+      return
+    end
+
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if not humanoidRootPart or not humanoid then
+      return
+    end
+
+    f12(p37)
+    local v85 = {}
+
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = character
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = v11.Chams.Fill
+    highlight.OutlineColor = v11.Chams.Outline
+    highlight.FillTransparency = v11.Chams.FillTransparency
+    highlight.OutlineTransparency = v11.Chams.OutlineTransparency
+    highlight.Parent = character
+
+    v85.hl = highlight
+
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Adornee = humanoidRootPart
+    billboardGui.Size = UDim2.new(0, 160, 0, 50)
+    billboardGui.StudsOffset = Vector3.new(0, 3.2, 0)
+    billboardGui.AlwaysOnTop = true
+    billboardGui.Parent = niehmuESP
+
+    v85.bb = billboardGui
+
+    local instance122 = Instance.new("TextLabel", billboardGui)
+    instance122.Size = UDim2.new(1, 0, 0, 18)
+    instance122.BackgroundTransparency = 0.4
+    instance122.BackgroundColor3 = Color3.new(0, 0, 0)
+    instance122.Text = p37.DisplayName or p37.Name
+    instance122.Font = Enum.Font.GothamBold
+    instance122.TextSize = 12
+    instance122.TextColor3 = v11.Name.Color
+
+    v85.name = instance122
+
+    local instance123 = Instance.new("TextLabel", billboardGui)
+    instance123.Size = UDim2.new(1, 0, 0, 14)
+    instance123.Position = UDim2.new(0, 0, 0, 18)
+    instance123.BackgroundTransparency = 1
+    instance123.Font = Enum.Font.Gotham
+    instance123.TextSize = 11
+    instance123.TextColor3 = v11.Distance.Color
+
+    v85.dist = instance123
+    v41[p37] = v85
+  end
+
+  function f10()
+    if not v11.Enabled then
+      if next(v41) then
+        f9()
+      end
+
+      return
+    end
+
+    local character2 = localPlayer.Character
+    local humanoidRootPart2 = character2 and character2:FindFirstChild("HumanoidRootPart")
+
+    if not humanoidRootPart2 then
+      return
+    end
+
+    local position3 = humanoidRootPart2.Position
+
+    for index6, value11 in ipairs(players:GetPlayers()) do
+      if value11 ~= localPlayer then
+        local character3 = value11.Character
+        local humanoid2 = character3 and character3:FindFirstChildOfClass("Humanoid")
+        local humanoidRootPart3 = character3 and character3:FindFirstChild("HumanoidRootPart")
+
+        if character3 and humanoid2 and humanoidRootPart3 and humanoid2.Health > 0 then
+          local magnitude = (humanoidRootPart3.Position - position3).Magnitude
+
+          if magnitude <= (v11.MaxDistance or 900) then
+            if not v41[value11] then
+              f11(value11)
+            end
+
+            local v86 = v41[value11]
+
+            if v86 and v86.dist then
+              v86.dist.Text = math.floor(magnitude) .. "m"
+            end
+          elseif v41[value11] then
+            f12(value11)
+          end
+        elseif v41[value11] then
+          f12(value11)
+        end
+      end
+    end
+  end
+
+  for index7, value12 in ipairs(players:GetPlayers()) do
+    if value12 ~= localPlayer then
+      value12.CharacterAdded:Connect(function()
+        task.wait(0.4)
+
+        if v11.Enabled then
+          f11(value12)
+        end
+      end)
+    end
+  end
+
+  f2(players.PlayerAdded, function(p38)
+    p38.CharacterAdded:Connect(function()
+      task.wait(0.4)
+
+      if v11.Enabled then
+        f11(p38)
+      end
+    end)
+  end)
+
+  f2(players.PlayerRemoving, f12)
+end
+
+f15()
+
+local v87, v88 = pcall(function()
+  local v89 = {}
+  local v90 = 0
+  local v91 = false
+  local v92 = {}
+  local v93 = setmetatable({}, { __mode = "k" })
+  local v94 = {}
+  local v95 = { MaxDistance = 5000, DeadBlacklistDuration = 4.5, LockFOV = 95 }
+
+  local v96 = {
+    MinNpcsRequired = 1,
+    MaxShootDistance = 320,
+    MaxLockDistance = 380,
+    ShootDelay = 0.055,
+    LootRange = 45,
+    MouseSensitivity = 1.2,
+    MaxDeltaMove = 30,
+    LootCooldown = 0.05,
+    MaxShotsOnTarget = 12,
+    SwitchIfNoDamage = 2.2,
+    AlignmentPixels = 32,
+    AlignedFramesNeeded = 1,
+    ScanInterval = 0.04,
+    MoveRate = 0.008,
+    LootCheckRate = 0.04,
+    VisibleFireDelay = 0.15,
+    CameraAssist = 0.08,
+    OffscreenPull = true,
+  }
+
+  local v97 = {}
+  local v98 = 0
+
+  local function f28()
+    local character4 = localPlayer.Character
+    local getPlayers = players:GetPlayers()
+
+    if #getPlayers ~= v98 then
+      v98 = #getPlayers
+      v97 = character4 and { character4 } or {}
+
+      for index8, value13 in ipairs(getPlayers) do
+        if value13 ~= localPlayer and value13.Character then
+          table.insert(v97, value13.Character)
+        end
+      end
+    elseif character4 ~= v97[1] then
+      v97[1] = character4
+    end
+
+    return v97
+  end
+
+  local raycastParams = RaycastParams.new()
+  raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+  raycastParams.IgnoreWater = true
+  raycastParams.RespectCanCollide = false
+
+  local function f29(p39)
+    if p39 then
+      v92[p39] = tick()
+      v94[p39] = nil
+
+      pcall(function()
+        local humanoid3 = p39:FindFirstChildOfClass("Humanoid")
+        v4.RegisterKill(p39, humanoid3)
+      end)
+    end
+  end
+
+  local function f30(p40)
+    if not p40 then
+      return true
+    end
+
+    local v99 = v92[p40]
+
+    if not v99 then
+      return false
+    end
+
+    if tick() - v99 > v95.DeadBlacklistDuration then
+      v92[p40] = nil
+      return false
+    end
+
+    return true
+  end
+
+  local function f31(position4, p41)
+    local character5 = localPlayer.Character
+
+    if not character5 then
+      return false
+    end
+
+    if typeof(position4) ~= "Vector3" and position4 and position4.Position then
+      p41 = position4
+      position4 = p41.Position
+    end
+
+    if not p41 or not p41.Parent then
+      return false
+    end
+
+    local head = character5:FindFirstChild("Head")
+
+    local position5 = head and head.Position
+      or workspace.CurrentCamera and workspace.CurrentCamera.CFrame.Position
+
+    if not position5 then
+      return false
+    end
+
+    raycastParams.FilterDescendantsInstances = f28()
+    local raycast = workspace:Raycast(position5, position4 - position5, raycastParams)
+
+    if not raycast then
+      return true
+    end
+
+    if raycast.Instance:IsDescendantOf(p41.Parent) then
+      return true
+    end
+
+    if (raycast.Position - position4).Magnitude <= 6 then
+      return true
+    end
+
+    return false
+  end
+
+  local function f32(p42)
+    local currentCamera10 = workspace.CurrentCamera
+
+    if not currentCamera10 then
+      return false
+    end
+
+    local cframe = currentCamera10.CFrame
+    local v100 = p42 - cframe.Position
+    local magnitude2 = v100.Magnitude
+
+    if magnitude2 < 0.1 then
+      return true
+    end
+
+    v100 = v100 / magnitude2
+    local lockFOV = v95.LockFOV or 180
+
+    if #v89 > 6 then
+      lockFOV = math.max(lockFOV, 160)
+    end
+
+    return cframe.LookVector:Dot(v100) >= math.cos(math.rad(lockFOV))
+  end
+
+  local function f33(p43)
+    if not v94[p43] then
+      v94[p43] = tick()
+    end
+  end
+
+  local function f34(p44)
+    local v101 = v94[p44]
+
+    if not v101 then
+      return false
+    end
+
+    return tick() - v101 >= v96.VisibleFireDelay
+  end
+
+  local function f35()
+    if v91 then
+      return
+    end
+
+    v91 = true
+
+    task.spawn(function()
+      pcall(function()
+        local character6 = localPlayer.Character
+        local head2 = character6 and character6:FindFirstChild("Head")
+
+        if not head2 then
+          v91 = false
+          return
+        end
+
+        local position6 = head2.Position
+        local v102 = {}
+
+        for index9, value14 in ipairs(players:GetPlayers()) do
+          if value14.Character then
+            v102[value14.Character] = true
+          end
+        end
+
+        local v103 = {}
+        local count3 = 0
+        local getDescendants = workspace:GetDescendants()
+
+        for i = 1, #getDescendants do
+          local v104 = getDescendants[i]
+
+          if v104:IsA("Humanoid") and v104.Health > 0 and v104.Health < math.huge then
+            local parent = v104.Parent
+
+            if parent and parent:IsA("Model") and not v102[parent] and not f30(parent) then
+              local head3 = parent:FindFirstChild("Head")
+                or parent:FindFirstChild("HumanoidRootPart")
+                or parent:FindFirstChild("UpperTorso") or parent:FindFirstChild("Torso")
+
+              if head3 and head3:IsA("BasePart") then
+                local magnitude3 = (head3.Position - position6).Magnitude
+
+                if magnitude3 <= 5000 then
+                  v103[#v103 + 1] = {
+                    head = head3,
+                    hum = v104,
+                    model = parent,
+                    dist = magnitude3,
+                  }
+
+                  if not v93[v104] then
+                    v93[v104] = true
+
+                    pcall(function()
+                      v104.Died:Connect(function()
+                        f29(parent)
+                        pcall(function() v4.RegisterKill(parent, v104) end)
+                      end)
+                    end)
+
+                    pcall(function()
+                      v104.HealthChanged:Connect(function(p45)
+                        if p45 and p45 <= 0 then
+                          f29(parent)
+                          pcall(function() v4.RegisterKill(parent, v104) end)
+                        end
+                      end)
+                    end)
+                  end
+                end
+              end
+            end
+          end
+
+          count3 = count3 + 1
+
+          if count3 % 600 == 0 then
+            task.wait()
+
+            if not v14 then
+              v91 = false
+              return
+            end
+          end
+        end
+
+        local v105 = {}
+
+        for j = 1, #v103 do
+          v105[v103[j].model] = true
+        end
+
+        for key7 in pairs(v94) do
+          if not v105[key7] then
+            v94[key7] = nil
+          end
+        end
+
+        table.sort(v103, function(p46, p47) return p46.dist < p47.dist end)
+        local v106 = 500
+
+        if v10 and v10.Enabled then
+          v106 = math.max(v106, 250)
+        end
+
+        if #v103 > v106 then
+          for k = v106 + 1, #v103 do
+            v103[k] = nil
+          end
+        end
+
+        v89 = v103
+      end)
+
+      v91 = false
+    end)
+  end
+
+  localPlayer.CharacterAdded:Connect(function()
+    v89 = {}
+    v94 = {}
+    v90 = 0
+  end)
+
+  local niehmuFarmHud, instance124, v107, v108, v109, instance125, v110 = nil, nil, nil, nil, nil, nil, nil
+
+  local v111 = {
+    Active = true,
+    StartTime = tick(),
+    Kills = 0,
+    Money = 0,
+  }
+
+  local v112 = ""
+  local v113 = 0
+  local v114 = {}
+  local v115 = {}
+
+  local function f36(p48, p49)
+    if not v110 then
+      return
+    end
+
+    if p48 ~= v112 then
+      v112 = p48
+      v110.Text = p48
+    end
+
+    if p49 then
+      v110.TextColor3 = p49
+    end
+  end
+
+  local textLabel
+
+  local function f37(p50)
+    if not textLabel or p50 <= 0 then
+      return
+    end
+
+    textLabel.Text = "+" .. tostring(p50) .. " $"
+    textLabel.Visible = true
+
+    v113 = tick()
+
+    task.spawn(function()
+      local v116 = tick()
+
+      while tick() - v116 < 1.2 and textLabel.Visible do
+        textLabel.Position = UDim2.new(0.5, -100, 0.42, -(tick() - v116) * 35)
+        task.wait()
+      end
+
+      if tick() - v113 >= 1.2 then
+        textLabel.Visible = false
+        textLabel.Position = UDim2.new(0.5, -100, 0.42, 0)
+      end
+    end)
+  end
+
+  local function f38()
+    niehmuFarmHud = Instance.new("Frame")
+    niehmuFarmHud.Name = "NIEHMU_FarmHud"
+    niehmuFarmHud.Size = UDim2.new(0, 280, 0, 215)
+    niehmuFarmHud.Position = UDim2.new(1, -300, 0.42, 0)
+    niehmuFarmHud.BackgroundColor3 = Color3.fromRGB(5, 0, 1)
+    niehmuFarmHud.BackgroundTransparency = 0.08
+    niehmuFarmHud.BorderSizePixel = 0
+    niehmuFarmHud.Visible = false
+    niehmuFarmHud.ClipsDescendants = true
+    niehmuFarmHud.Parent = niehmuPanel4
+
+    Instance.new("UICorner", niehmuFarmHud).CornerRadius = UDim.new(0, 16)
+
+    local instance126 = Instance.new("UIStroke", niehmuFarmHud)
+    instance126.Color = Color3.fromRGB(90, 10, 18)
+    instance126.Thickness = 1.2
+    instance126.Transparency = 0.35
+
+    local instance127 = Instance.new("Frame", niehmuFarmHud)
+    instance127.Size = UDim2.new(1, 0, 0, 44)
+    instance127.BackgroundColor3 = v16.Glass
+    instance127.BackgroundTransparency = 0.25
+    instance127.BorderSizePixel = 0
+    instance127.Active = true
+
+    Instance.new("UICorner", instance127).CornerRadius = UDim.new(0, 16)
+
+    local instance128 = Instance.new("Frame", instance127)
+    instance128.Size = UDim2.new(0, 2, 0, 22)
+    instance128.Position = UDim2.new(0, 12, 0.5, -11)
+    instance128.BackgroundColor3 = Color3.fromRGB(255, 70, 95)
+    instance128.BorderSizePixel = 0
+
+    Instance.new("UICorner", instance128).CornerRadius = UDim.new(1, 0)
+
+    local instance129 = Instance.new("TextLabel", instance127)
+    instance129.Size = UDim2.new(1, -100, 1, 0)
+    instance129.Position = UDim2.new(0, 22, 0, 0)
+    instance129.BackgroundTransparency = 1
+    instance129.Text = "FARM PANEL"
+    instance129.TextColor3 = Color3.fromRGB(255, 230, 232)
+    instance129.Font = Enum.Font.GothamBlack
+    instance129.TextSize = 13
+    instance129.TextXAlignment = Enum.TextXAlignment.Left
+
+    local instance130 = Instance.new("Frame", instance127)
+    instance130.Size = UDim2.fromOffset(16, 16)
+    instance130.Position = UDim2.new(1, -54, 0.5, -8)
+    instance130.BackgroundTransparency = 1
+
+    instance124 = Instance.new("Frame", instance130)
+    instance124.Size = UDim2.fromOffset(8, 8)
+    instance124.AnchorPoint = Vector2.new(0.5, 0.5)
+    instance124.Position = UDim2.new(0.5, 0, 0.5, 0)
+    instance124.BackgroundColor3 = Color3.fromRGB(60, 220, 100)
+    instance124.BorderSizePixel = 0
+
+    Instance.new("UICorner", instance124).CornerRadius = UDim.new(1, 0)
+
+    local instance131 = Instance.new("TextButton", instance127)
+    instance131.Size = UDim2.new(0, 14, 0, 14)
+    instance131.Position = UDim2.new(1, -26, 0.5, -7)
+    instance131.BackgroundColor3 = Color3.fromRGB(190, 18, 30)
+    instance131.Text = ""
+    instance131.AutoButtonColor = false
+    instance131.ZIndex = 5
+
+    Instance.new("UICorner", instance131).CornerRadius = UDim.new(1, 0)
+
+    local instance132 = Instance.new("UIStroke", instance131)
+    instance132.Color = Color3.fromRGB(255, 50, 70)
+    instance132.Thickness = 1
+    instance132.Transparency = 0.6
+
+    f14(
+      instance131, Color3.fromRGB(190, 18, 30), Color3.fromRGB(255, 35, 55), instance132, 0.05
+    )
+
+    instance131.Activated:Connect(function()
+      if _G.NIEHMU_ToggleFarmPanel then
+        _G.NIEHMU_ToggleFarmPanel()
+      end
+    end)
+
+    local function f39(p51, text5, text6)
+      local instance133 = Instance.new("Frame", niehmuFarmHud)
+      instance133.Size = UDim2.new(1, -24, 0, 36)
+      instance133.Position = UDim2.new(0, 12, 0, p51)
+      instance133.BackgroundColor3 = Color3.fromRGB(12, 1, 3)
+      instance133.BackgroundTransparency = 0.18
+      instance133.BorderSizePixel = 0
+
+      Instance.new("UICorner", instance133).CornerRadius = UDim.new(0, 10)
+
+      local instance134 = Instance.new("UIStroke", instance133)
+      instance134.Color = Color3.fromRGB(90, 10, 18)
+      instance134.Thickness = 1
+      instance134.Transparency = 0.5
+
+      local instance135 = Instance.new("Frame", instance133)
+      instance135.Size = UDim2.new(0, 2, 0, 18)
+      instance135.Position = UDim2.new(0, 10, 0.5, -9)
+      instance135.BackgroundColor3 = Color3.fromRGB(220, 30, 45)
+      instance135.BorderSizePixel = 0
+
+      Instance.new("UICorner", instance135).CornerRadius = UDim.new(1, 0)
+
+      local instance136 = Instance.new("TextLabel", instance133)
+      instance136.Size = UDim2.new(1, -70, 0, 14)
+      instance136.Position = UDim2.new(0, 20, 0, 3)
+      instance136.BackgroundTransparency = 1
+      instance136.Text = text5
+      instance136.TextColor3 = v16.TextDim
+      instance136.Font = Enum.Font.GothamBold
+      instance136.TextSize = 9
+      instance136.TextXAlignment = Enum.TextXAlignment.Left
+
+      local instance137 = Instance.new("TextLabel", instance133)
+      instance137.Size = UDim2.new(1, -30, 0, 16)
+      instance137.Position = UDim2.new(0, 20, 0, 16)
+      instance137.BackgroundTransparency = 1
+      instance137.Text = text6
+      instance137.TextColor3 = Color3.fromRGB(255, 240, 242)
+      instance137.Font = Enum.Font.GothamBlack
+      instance137.TextSize = 13
+      instance137.TextXAlignment = Enum.TextXAlignment.Left
+
+      return instance137
+    end
+
+    v107 = f39(54, "⏱  TIME", "00:00:00")
+    v108 = f39(96, "💀  KILLS", "0")
+    v109 = f39(138, "💰  MONEY", "+0")
+
+    instance125 = Instance.new("TextButton", niehmuFarmHud)
+    instance125.Size = UDim2.new(1, -24, 0, 32)
+    instance125.Position = UDim2.new(0, 12, 0, 180)
+    instance125.BackgroundColor3 = v16.Row
+    instance125.BackgroundTransparency = 0.14
+    instance125.Text = "Reset Session"
+    instance125.TextColor3 = v16.Text
+    instance125.Font = Enum.Font.GothamBold
+    instance125.TextSize = 12
+    instance125.AutoButtonColor = false
+
+    Instance.new("UICorner", instance125).CornerRadius = UDim.new(0, 10)
+
+    local instance138 = Instance.new("UIStroke", instance125)
+    instance138.Color = v16.BorderSoft
+    instance138.Thickness = 1
+    instance138.Transparency = 0.65
+
+    instance125.MouseEnter:Connect(function()
+      tweenService:Create(instance125, tweenInfo2, {
+        BackgroundColor3 = Color3.fromRGB(26, 2, 4),
+        BackgroundTransparency = 0.05,
+      }):Play()
+
+      tweenService:Create(instance138, tweenInfo2, { Transparency = 0.3 }):Play()
+    end)
+
+    instance125.MouseLeave:Connect(function()
+      tweenService:Create(instance125, tweenInfo2, {
+        BackgroundColor3 = v16.Row,
+        BackgroundTransparency = 0.14,
+      }):Play()
+
+      tweenService:Create(instance138, tweenInfo2, { Transparency = 0.65 }):Play()
+    end)
+
+    instance125.MouseButton1Down:Connect(function()
+      tweenService:Create(instance125, tweenInfo, { BackgroundTransparency = 0 }):Play()
+    end)
+
+    instance125.MouseButton1Up:Connect(function()
+      tweenService:Create(instance125, tweenInfo2, {
+        BackgroundColor3 = v16.Row,
+        BackgroundTransparency = 0.05,
+      }):Play()
+    end)
+
+    instance125.Activated:Connect(function()
+      v111.StartTime = tick()
+      v111.Kills = 0
+      v111.Money = 0
+
+      v44.NpcKilled = 0
+      v44.MoneyEarned = 0
+      v44.CountedModels = setmetatable({}, { __mode = "k" })
+      v44.CountedHumans = setmetatable({}, { __mode = "k" })
+      v44.MoneyLast = f13()
+
+      if v107 then
+        v107.Text = "00:00:00"
+      end
+
+      if v108 then
+        v108.Text = "0"
+      end
+
+      if v109 then
+        v109.Text = "+0"
+      end
+    end)
+
+    textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(0, 200, 0, 40)
+    textLabel.Position = UDim2.new(0.5, -100, 0.42, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = ""
+    textLabel.TextColor3 = Color3.fromRGB(90, 230, 130)
+    textLabel.Font = Enum.Font.GothamBlack
+    textLabel.TextSize = 20
+    textLabel.Visible = false
+    textLabel.Parent = niehmuPanel4
+
+    function _G.NIEHMU_ToggleFarmPanel()
+      if not niehmuFarmHud then
+        return
+      end
+
+      if not niehmuFarmHud.Visible then
+        niehmuFarmHud.Visible = true
+        niehmuFarmHud.BackgroundTransparency = 1
+        niehmuFarmHud.Size = UDim2.new(0, 260, 0, 190)
+        niehmuFarmHud.Position = UDim2.new(1, -290, 0.42, 10)
+
+        tweenService:Create(niehmuFarmHud, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+          Size = UDim2.new(0, 280, 0, 215),
+          BackgroundTransparency = 0.08,
+          Position = UDim2.new(1, -300, 0.42, 0),
+        }):Play()
+      else
+        tweenService:Create(niehmuFarmHud, TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+          Size = UDim2.new(0, 260, 0, 190),
+          BackgroundTransparency = 1,
+          Position = UDim2.new(1, -290, 0.42, 10),
+        }):Play()
+
+        task.delay(0.2, function()
+          if niehmuFarmHud.BackgroundTransparency >= 0.9 then
+            niehmuFarmHud.Visible = false
+          end
+        end)
+      end
+    end
+
+    local v117, position7, position8 = false, nil, nil
+
+    instance127.InputBegan:Connect(function(input5)
+      if input5.UserInputType == Enum.UserInputType.MouseButton1
+        or input5.UserInputType == Enum.UserInputType.Touch then
+        v117 = true
+        position7 = input5.Position
+        position8 = niehmuFarmHud.Position
+
+        input5.Changed:Connect(function()
+          if input5.UserInputState == Enum.UserInputState.End then
+            v117 = false
+          end
+        end)
+      end
+    end)
+
+    f2(userInputService.InputChanged, function(p52)
+      if v117
+        and (p52.UserInputType == Enum.UserInputType.MouseMovement
+          or p52.UserInputType == Enum.UserInputType.Touch) then
+        local v118 = p52.Position - position7
+
+        niehmuFarmHud.Position = UDim2.new(
+          position8.X.Scale, position8.X.Offset + v118.X, position8.Y.Scale,
+          position8.Y.Offset + v118.Y
+        )
+      end
+    end)
+  end
+
+  local function f40(p53)
+    if not v111.Active then
+      return
+    end
+
+    if type(p53) == "number" and p53 > 0 and p53 < 1000000 then
+      v111.Money = v111.Money + p53
+      v111.Kills = v111.Kills + 1
+      f37(p53)
+    end
+  end
+
+  local function f41(p54)
+    if v114[p54] then
+      return
+    end
+
+    v114[p54] = true
+    local value15 = p54.Value
+
+    f2(p54.Changed, function(p55)
+      local v119 = p55 - (value15 or p55)
+      value15 = p55
+
+      if v119 > 0 then
+        f40(v119)
+      end
+    end)
+  end
+
+  local function f42()
+    local function f43(p56)
+      if not p56 then
+        return
+      end
+
+      for index10, value16 in ipairs(p56:GetDescendants()) do
+        if value16:IsA("IntValue") or value16:IsA("NumberValue")
+          or value16:IsA("DoubleConstrainedValue") then
+          local v120 = string.lower(value16.Name)
+
+          if v120:find("money") or v120:find("cash") or v120:find("gold") or v120:find("dollar")
+            or v120:find("argent") or v120:find("credit") or v120:find("bonds") then
+            f41(value16)
+          end
+        end
+      end
+    end
+
+    pcall(function() f43(localPlayer) end)
+    pcall(function() f43(waitForChild) end)
+  end
+
+  local function f44(p57)
+    if v115[p57] then
+      return
+    end
+
+    v115[p57] = true
+    local v121 = string.lower(p57.Name)
+
+    if p57:IsA("RemoteEvent") then
+      f2(p57.OnClientEvent, function(...)
+        for index11, value17 in ipairs({ ... }) do
+          if type(value17) == "number" then
+            if v121:find("money") or v121:find("cash") or v121:find("reward")
+              or v121:find("gold") or v121:find("add") then
+              f40(value17)
+            end
+          elseif type(value17) == "table" then
+            if value17.Money or value17.Cash or value17.Amount then
+              f40(value17.Money or value17.Cash or value17.Amount)
+            end
+          end
+        end
+      end)
+    elseif p57:IsA("BindableEvent") then
+      f2(p57.Event, function(...)
+        for index12, value18 in ipairs({ ... }) do
+          if type(value18) == "number"
+            and (v121:find("money") or v121:find("cash") or v121:find("reward")) then
+            f40(value18)
+          end
+        end
+      end)
+    end
+  end
+
+  local function f45()
+    pcall(function()
+      f42()
+
+      for index13, value19 in ipairs(replicatedStorage:GetDescendants()) do
+        if value19:IsA("RemoteEvent") or value19:IsA("BindableEvent") then
+          f44(value19)
+        end
+      end
+
+      for index14, value20 in ipairs(waitForChild:GetDescendants()) do
+        if value20:IsA("RemoteEvent") or value20:IsA("BindableEvent") then
+          f44(value20)
+        end
+      end
+    end)
+  end
+
+  local function f46()
+    v111.Active = false
+
+    if instance124 then
+      instance124.BackgroundColor3 = v16.Close
+    end
+  end
+
+  local v122 = false
+  local v123 = false
+  local count4 = 0
+  local v124 = 0
+  local model = nil
+  local v125 = 0
+  local v126 = 0
+  local health = 0
+  local v127 = 0
+  local count5 = 0
+  local v128 = false
+  local v129 = false
+  local v130 = 0
+
+  local function f47(p58)
+    if not p58 or not p58.Parent then
+      return false
+    end
+
+    local currentCamera11 = workspace.CurrentCamera
+
+    if not currentCamera11 then
+      return false
+    end
+
+    local v131, v132 = currentCamera11:WorldToViewportPoint(p58.Position)
+    local viewportSize = currentCamera11.ViewportSize
+    local v133, v134 = viewportSize.X * 0.5, viewportSize.Y * 0.5
+    local x, y = v131.X, v131.Y
+
+    if v131.Z < 0 then
+      x = v133 - (x - v133)
+      y = v134 - (y - v134)
+    end
+
+    if not v132 and not v96.OffscreenPull then
+      return false
+    end
+
+    local v135, v136 = x - v133, y - v134
+    local v137 = math.sqrt(v135 * v135 + v136 * v136)
+
+    if v137 < 3 then
+      return true
+    end
+
+    local v138 = math.clamp(v137 / 80, 0.05, 0.9)
+
+    local v139 = math.clamp(
+      v135 * v96.MouseSensitivity * v138, -v96.MaxDeltaMove, v96.MaxDeltaMove
+    )
+
+    local v140 = math.clamp(
+      v136 * v96.MouseSensitivity * v138, -v96.MaxDeltaMove, v96.MaxDeltaMove
+    )
+
+    local v141 = false
+
+    if typeof(mousemoverel) == "function" then
+      v141 = pcall(mousemoverel, v139, v140)
+    end
+
+    if not v141 and typeof(mousemoveabs) == "function" then
+      local getMouseLocation2 = userInputService:GetMouseLocation()
+      pcall(mousemoveabs, getMouseLocation2.X + v139, getMouseLocation2.Y + v140)
+    end
+
+    pcall(function()
+      local getMouseLocation3 = userInputService:GetMouseLocation()
+      v1:SendMouseMoveEvent(getMouseLocation3.X + v139, getMouseLocation3.Y + v140, game)
+    end)
+
+    if v96.CameraAssist > 0 then
+      pcall(function()
+        local v142 = math.clamp(v96.CameraAssist, 0.01, 0.15)
+
+        currentCamera11.CFrame = currentCamera11.CFrame:Lerp(CFrame.new(
+          currentCamera11.CFrame.Position, p58.Position
+        ), v142)
+      end)
+    end
+
+    return true
+  end
+
+  local function f48()
+    local character7 = localPlayer.Character
+    local head4 = character7 and character7:FindFirstChild("Head")
+
+    if not head4 then
+      return 0
+    end
+
+    local position9 = head4.Position
+    local count6 = 0
+
+    for m = 1, #v89 do
+      local v143 = v89[m]
+
+      if v143 and v143.head and v143.head.Parent and v143.hum and v143.hum.Health > 0 then
+        if (v143.head.Position - position9).Magnitude <= v96.MaxLockDistance then
+          if not f30(v143.model) and f32(v143.head.Position)
+            and f31(v143.head.Position, v143.head) then
+            count6 = count6 + 1
+          end
+        end
+      end
+    end
+
+    return count6
+  end
+
+  local function f49()
+    local character8 = localPlayer.Character
+    local head5 = character8 and character8:FindFirstChild("Head")
+
+    if not head5 then
+      return nil
+    end
+
+    local position10 = head5.Position
+    local currentCamera12 = workspace.CurrentCamera
+
+    if not currentCamera12 then
+      return nil
+    end
+
+    local v144, huge = nil, math.huge
+
+    for n = 1, #v89 do
+      local v145 = v89[n]
+
+      if v145 and v145.head and v145.head.Parent and v145.hum and v145.hum.Health > 0 then
+        local magnitude4 = (v145.head.Position - position10).Magnitude
+
+        if magnitude4 <= v96.MaxLockDistance and not f30(v145.model) then
+          if f32(v145.head.Position) and f31(v145.head.Position, v145.head) then
+            local unit = (v145.head.Position - currentCamera12.CFrame.Position).Unit
+            local v146 = magnitude4 + (1 - currentCamera12.CFrame.LookVector:Dot(unit)) * 18
+
+            if v146 < huge then
+              huge = v146
+              v144 = v145
+            end
+          end
+        end
+      end
+    end
+
+    return v144
+  end
+
+  local function f50()
+    if tick() - v96.ShootDelay < v126 then
+      return
+    end
+
+    v126 = tick()
+    local v147 = count5
+    local getMouseLocation4 = userInputService:GetMouseLocation()
+
+    pcall(function()
+      v1:SendMouseButtonEvent(getMouseLocation4.X, getMouseLocation4.Y, 0, true, game, 0)
+    end)
+
+    task.delay(0.018, function()
+      if v147 ~= count5 then
+        return
+      end
+
+      pcall(function()
+        local getMouseLocation5 = userInputService:GetMouseLocation()
+        v1:SendMouseButtonEvent(getMouseLocation5.X, getMouseLocation5.Y, 0, false, game, 0)
+      end)
+    end)
+  end
+
+  local function f51()
+    if v128 then
+      return
+    end
+
+    v128 = true
+
+    while v122 and v14 do
+      task.wait(v96.MoveRate)
+
+      if not v122 or not v14 then
+        break
+      end
+
+      local v148 = count4
+
+      if v91 and tick() - v90 > 1.5 then
+        v91 = false
+      end
+
+      if tick() - v90 > v96.ScanInterval and not v91 then
+        v90 = tick()
+        task.spawn(f35)
+      end
+
+      local v149 = f48()
+
+      if v149 >= 1 then
+        v123 = true
+      elseif v149 == 0 then
+        v123 = false
+      end
+
+      if v123 then
+        local v150 = f49()
+
+        if not v150 then
+          if v91 then
+            v91 = false
+          end
+
+          v90 = 0
+          f35()
+          v150 = f49()
+
+          if not v150 and #v89 > 0 then
+            local character9 = localPlayer.Character
+            local head6 = character9 and character9:FindFirstChild("Head")
+
+            if head6 then
+              local v151, huge2 = nil, math.huge
+
+              for index15, value21 in ipairs(v89) do
+                if value21.head and value21.head.Parent and value21.hum
+                  and value21.hum.Health > 0 and not f30(value21.model) then
+                  local magnitude5 = (value21.head.Position - head6.Position).Magnitude
+
+                  if magnitude5 < huge2 and magnitude5 <= v96.MaxLockDistance then
+                    huge2 = magnitude5
+                    v151 = value21
+                  end
+                end
+              end
+
+              v150 = v151
+            end
+          end
+        end
+
+        if v148 ~= count4 then
+          v150 = nil
+        end
+
+        if v150 then
+          if v150.model ~= model then
+            model = v150.model
+            v124 = 0
+            v125 = 0
+            health = v150.hum.Health
+            v127 = tick()
+          end
+
+          f33(v150.model)
+          f47(v150.head)
+          local currentCamera13 = workspace.CurrentCamera
+
+          if currentCamera13 then
+            local v152, v153 = currentCamera13:WorldToViewportPoint(v150.head.Position)
+
+            if v153 and v152.Z > 0 then
+              local getMouseLocation6 = userInputService:GetMouseLocation()
+
+              local v154 = math.sqrt((getMouseLocation6.X - v152.X) ^ 2
+                + (getMouseLocation6.Y - v152.Y) ^ 2)
+
+              local health2 = v150.hum.Health
+              local name = v150.model and v150.model.Name or "?"
+
+              if tick() - v127 > v96.SwitchIfNoDamage then
+                if health2 >= health - 0.1 then
+                  f29(v150.model)
+                  v94[v150.model] = nil
+                  model = nil
+                  v124 = 0
+                  v125 = 0
+                  f36("No damage -> switch", Color3.fromRGB(255, 180, 100))
+                  task.wait(0.04)
+                else
+                  health = health2
+                  v127 = tick()
+                end
+              end
+
+              if model == v150.model then
+                if v154 < v96.AlignmentPixels then
+                  v125 = v125 + 1
+
+                  f36(
+                    "Locked: " .. name .. " (" .. v149 + 1 .. " NPC)",
+                    Color3.fromRGB(100, 255, 130)
+                  )
+
+                  if v125 >= v96.AlignedFramesNeeded then
+                    if f34(v150.model) then
+                      local character10 = localPlayer.Character
+                      local head7 = character10 and character10:FindFirstChild("Head")
+
+                      if head7
+                        and (v150.head.Position - head7.Position).Magnitude
+                          <= v96.MaxShootDistance then
+                        f50()
+                        v124 = v124 + 1
+
+                        f36("FIRE: " .. name .. " (" .. v124 .. "/" .. v96.MaxShotsOnTarget
+                          .. ")", Color3.fromRGB(255, 100, 100))
+
+                        if v124 >= v96.MaxShotsOnTarget then
+                          f29(v150.model)
+                          v94[v150.model] = nil
+                          model = nil
+                          v124 = 0
+                          v125 = 0
+                          f36("Max shots -> switch", Color3.fromRGB(255, 180, 100))
+                        end
+                      end
+                    end
+                  end
+                else
+                  v125 = 0
+                  f36("Aligning...", Color3.fromRGB(200, 200, 255))
+                end
+              end
+            else
+              v125 = 0
+            end
+          end
+        end
+      else
+        model = nil
+        v124 = 0
+        v125 = 0
+
+        f36("Waiting " .. v96.MinNpcsRequired .. " NPC (" .. v149 + 1 .. "/"
+          .. v96.MinNpcsRequired .. ")", Color3.fromRGB(200, 180, 100))
+      end
+    end
+
+    v128 = false
+  end
+
+  local v155 = {}
+  local v156 = {}
+  local v157 = false
+  local v158 = 0
+
+  local function f52(p59)
+    if p59 and p59:IsA("ProximityPrompt") then
+      v155[p59] = true
+    end
+  end
+
+  task.spawn(function()
+    task.wait(0.5)
+
+    for index16, value22 in ipairs(workspace:GetDescendants()) do
+      if value22:IsA("ProximityPrompt") then
+        f52(value22)
+      end
+    end
+  end)
+
+  f2(workspace.DescendantAdded, function(p60) f52(p60) end)
+
+  f2(workspace.DescendantRemoving, function(p61)
+    v155[p61] = nil
+    v156[p61] = nil
+  end)
+
+  local function f53(p62)
+    local parent2 = p62.Parent
+
+    if not parent2 then
+      return nil
+    end
+
+    if parent2:IsA("BasePart") then
+      return parent2.Position
+    end
+
+    if parent2:IsA("Attachment") then
+      return parent2.WorldPosition
+    end
+
+    if parent2:IsA("Model") then
+      local primaryPart = parent2.PrimaryPart or parent2:FindFirstChildWhichIsA("BasePart")
+
+      if primaryPart then
+        return primaryPart.Position
+      end
+    end
+
+    return nil
+  end
+
+  local function f54()
+    if not v122 then
+      return
+    end
+
+    local v159 = tick()
+
+    if v159 - v158 < v96.LootCheckRate then
+      return
+    end
+
+    v158 = v159
+
+    if v157 then
+      return
+    end
+
+    v157 = true
+
+    task.spawn(function()
+      pcall(function()
+        local character11 = localPlayer.Character
+        local humanoidRootPart4 = character11 and character11:FindFirstChild("HumanoidRootPart")
+
+        if not humanoidRootPart4 then
+          v157 = false
+          return
+        end
+
+        local position11 = humanoidRootPart4.Position
+        local v160 = tick()
+
+        pcall(function()
+          v1:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+          task.wait(0.015)
+          v1:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+        end)
+
+        for key8 in pairs(v155) do
+          if key8 and key8.Parent and key8.Enabled then
+            local v161 = v156[key8]
+
+            if not v161 or v160 - v161 > v96.LootCooldown then
+              local v162 = f53(key8)
+
+              if v162 then
+                if (v162 - position11).Magnitude <= v96.LootRange then
+                  v156[key8] = tick()
+
+                  pcall(function()
+                    key8.HoldDuration = 0
+                    key8.RequiresLineOfSight = false
+
+                    key8.MaxActivationDistance = math.max(
+                      key8.MaxActivationDistance, v96.LootRange
+                    )
+                  end)
+
+                  pcall(function()
+                    if typeof(fireproximityprompt) == "function" then
+                      fireproximityprompt(key8)
+                    end
+                  end)
+                end
+              end
+            end
+          else
+            v155[key8] = nil
+            v156[key8] = nil
+          end
+        end
+      end)
+
+      v157 = false
+    end)
+  end
+
+  local function f55()
+    if v122 then
+      return
+    end
+
+    v122 = true
+    v123 = false
+    count4 = count4 + 1
+    model = nil
+    v124 = 0
+    v125 = 0
+    v126 = 0
+    health = 0
+    v127 = 0
+    count5 = count5 + 1
+    v128 = false
+    v90 = 0
+    v94 = {}
+    v112 = ""
+    task.spawn(f35)
+    f36("Active", Color3.fromRGB(100, 255, 130))
+    task.spawn(f51)
+
+    if btnStatusIndicator then
+      btnStatusIndicator.BackgroundColor3 = Color3.fromRGB(60, 220, 100)
+    end
+  end
+
+  local function f56()
+    if not v122 then
+      return
+    end
+
+    v122 = false
+    v123 = false
+    count5 = count5 + 1
+    model = nil
+    v124 = 0
+    v125 = 0
+    v128 = false
+    f46()
+    f36("Inactive", v16.TextMuted)
+
+    if btnStatusIndicator then
+      btnStatusIndicator.BackgroundColor3 = v16.Off
+    end
+
+    pcall(function()
+      local getMouseLocation7 = userInputService:GetMouseLocation()
+      v1:SendMouseButtonEvent(getMouseLocation7.X, getMouseLocation7.Y, 0, false, game, 0)
+      v1:SendMouseButtonEvent(getMouseLocation7.X, getMouseLocation7.Y, 1, false, game, 0)
+    end)
+
+    pcall(function() v1:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
+  end
+
+  f38()
+
+  f2(runService.Heartbeat, function()
+    local v163 = tick()
+
+    if v163 - v130 < 0.1 then
+      return
+    end
+
+    v130 = v163
+
+    if not v122 then
+      return
+    end
+
+    if v122 and v123 then
+      if not v129 then
+        v129 = true
+        local getMouseLocation8 = userInputService:GetMouseLocation()
+
+        pcall(function()
+          v1:SendMouseButtonEvent(getMouseLocation8.X, getMouseLocation8.Y, 1, true, game, 0)
+        end)
+      end
+    elseif v129 then
+      v129 = false
+      local getMouseLocation9 = userInputService:GetMouseLocation()
+
+      pcall(function()
+        v1:SendMouseButtonEvent(getMouseLocation9.X, getMouseLocation9.Y, 1, false, game, 0)
+      end)
+    end
+  end)
+
+  task.spawn(function()
+    while v14 do
+      task.wait(0.4)
+
+      if v111.Active then
+        local v164 = math.floor(tick() - v111.StartTime)
+
+        if v107 then
+          v107.Text = string.format(
+            "%02d:%02d:%02d", math.floor(v164 / 3600), math.floor(v164 % 3600 / 60), v164 % 60
+          )
+        end
+
+        if v108 then
+          v108.Text = tostring(v111.Kills)
+        end
+
+        if v109 then
+          v109.Text = "+" .. tostring(v111.Money)
+        end
+      end
+    end
+  end)
+
+  task.spawn(function()
+    while v14 do
+      task.wait(2)
+
+      if v122 then
+        f45()
+      end
+    end
+  end)
+
+  local v165 = { Active = false, LastPress = 0, LoopRunning = false }
+
+  local v166 = {
+    [0] = true,
+    [""] = true,
+    ["0"] = true,
+    QMod = true,
+    qmod = true,
+    None = true,
+    none = true,
+    ["nil"] = true,
+  }
+
+  local function f57()
+    local character12 = localPlayer.Character
+
+    if not character12 then
+      return false, nil
+    end
+
+    local danceId = character12:GetAttribute("DanceId")
+
+    if danceId == nil then
+      return false, nil
+    end
+
+    local v167 = tostring(danceId)
+
+    if v166[danceId] or v166[v167] then
+      return false, v167
+    end
+
+    if type(danceId) == "string" and #danceId > 0 then
+      return true, v167
+    end
+
+    if type(danceId) == "number" and danceId ~= 0 then
+      return true, v167
+    end
+
+    return false, v167
+  end
+
+  local function f58()
+    pcall(function()
+      v1:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
+      task.wait(0.04)
+      v1:SendKeyEvent(false, Enum.KeyCode.Two, false, game)
+    end)
+  end
+
+  local function f59()
+    if v165.LoopRunning then
+      return
+    end
+
+    v165.LoopRunning = true
+
+    task.spawn(function()
+      local v168 = 0
+
+      while v165.Active and v14 do
+        if f57() then
+          local v169 = tick()
+
+          if v169 - v168 >= 0.35 then
+            f58()
+            v168 = v169
+          end
+        end
+
+        task.wait(0.12)
+      end
+
+      v165.LoopRunning = false
+    end)
+  end
+
+  local function f60(p63)
+    v165.Active = p63 and true or false
+    f4(v20, v21, v165.Active)
+
+    if v165.Active then
+      f59()
+    end
+  end
+
+  v43 = {}
+
+  local niehmuNpcESPUI = Instance.new("Folder")
+  niehmuNpcESPUI.Name = "NIEHMU_NpcESP_UI"
+  niehmuNpcESPUI.Parent = niehmuPanel4
+
+  local function f61(p64)
+    local v170 = v43[p64]
+
+    if not v170 then
+      return
+    end
+
+    if v170.hl and v170.hl.Parent then
+      pcall(function() v170.hl:Destroy() end)
+    end
+
+    if v170.bb and v170.bb.Parent then
+      pcall(function() v170.bb:Destroy() end)
+    end
+
+    v43[p64] = nil
+  end
+
+  local function f62()
+    for key9 in pairs(v43) do
+      f61(key9)
+    end
+  end
+
+  local function f63(p65, p66)
+    if not v10.Enabled then
+      return
+    end
+
+    if not p65 or not p65.Parent or v43[p65] then
+      return
+    end
+
+    local hum = p66 and p66.hum or p65:FindFirstChildOfClass("Humanoid")
+
+    local head8 = p66 and p66.head or p65:FindFirstChild("Head")
+      or p65:FindFirstChild("HumanoidRootPart")
+
+    if not hum or hum.Health <= 0 or not head8 then
+      return
+    end
+
+    local v171 = {}
+
+    if v10.Chams.Enabled then
+      local niehmuNpcESP = Instance.new("Highlight")
+      niehmuNpcESP.Name = "NIEHMU_NpcESP"
+      niehmuNpcESP.Adornee = p65
+      niehmuNpcESP.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+      niehmuNpcESP.FillColor = v10.Chams.Fill
+      niehmuNpcESP.OutlineColor = v10.Chams.Outline
+      niehmuNpcESP.FillTransparency = v10.Chams.FillTransparency
+      niehmuNpcESP.OutlineTransparency = v10.Chams.OutlineTransparency
+      niehmuNpcESP.Parent = p65
+
+      v171.hl = niehmuNpcESP
+    end
+
+    if v10.Distance.Enabled or v10.Health.Enabled or v10.HeadImage.Enabled then
+      local niehmuNpcESPBB = Instance.new("BillboardGui")
+      niehmuNpcESPBB.Name = "NIEHMU_NpcESP_BB"
+      niehmuNpcESPBB.Adornee = head8
+      niehmuNpcESPBB.Size = UDim2.new(0, 100, 0, 64)
+      niehmuNpcESPBB.StudsOffset = Vector3.new(0, 2.85, 0)
+      niehmuNpcESPBB.AlwaysOnTop = true
+      niehmuNpcESPBB.MaxDistance = 0
+      niehmuNpcESPBB.Parent = niehmuNpcESPUI
+
+      v171.bb = niehmuNpcESPBB
+
+      local headImage = Instance.new("ImageLabel", niehmuNpcESPBB)
+      headImage.Name = "HeadImage"
+      headImage.AnchorPoint = Vector2.new(0.5, 0)
+      headImage.Position = UDim2.new(0.5, 0, 0, 0)
+      headImage.Size = UDim2.fromOffset(v10.HeadImage.Size, v10.HeadImage.Size)
+      headImage.BackgroundColor3 = v10.HeadImage.FallbackColor
+      headImage.BackgroundTransparency = v10.HeadImage.Image ~= "" and 1 or 0.15
+      headImage.Image = v10.HeadImage.Image or ""
+      headImage.ScaleType = Enum.ScaleType.Fit
+      headImage.BorderSizePixel = 0
+      headImage.Visible = v10.HeadImage.Enabled
+
+      Instance.new("UICorner", headImage).CornerRadius = UDim.new(0, 6)
+
+      local instance139 = Instance.new("UIStroke", headImage)
+      instance139.Color = Color3.fromRGB(255, 255, 255)
+      instance139.Thickness = 1
+      instance139.Transparency = 0.5
+
+      v171.headImg = headImage
+
+      local distanceBg = Instance.new("Frame", niehmuNpcESPBB)
+      distanceBg.Name = "DistanceBg"
+      distanceBg.AnchorPoint = Vector2.new(0.5, 0)
+      distanceBg.Position = UDim2.new(0.5, 0, 0, 32)
+      distanceBg.Size = UDim2.new(0, 72, 0, 15)
+      distanceBg.BackgroundColor3 = Color3.fromRGB(12, 2, 4)
+      distanceBg.BackgroundTransparency = 0.28
+      distanceBg.BorderSizePixel = 0
+      distanceBg.Visible = v10.Distance.Enabled
+
+      Instance.new("UICorner", distanceBg).CornerRadius = UDim.new(0, 5)
+
+      local instance140 = Instance.new("UIStroke", distanceBg)
+      instance140.Color = Color3.fromRGB(120, 20, 30)
+      instance140.Thickness = 1
+      instance140.Transparency = 0.55
+
+      local instance141 = Instance.new("TextLabel", distanceBg)
+      instance141.Size = UDim2.fromScale(1, 1)
+      instance141.BackgroundTransparency = 1
+      instance141.Font = Enum.Font.GothamBold
+      instance141.TextSize = 10
+      instance141.TextColor3 = v10.Distance.Color
+      instance141.Text = ""
+      instance141.TextXAlignment = Enum.TextXAlignment.Center
+
+      v171.distBg = distanceBg
+      v171.dist = instance141
+
+      local healthBg = Instance.new("Frame", niehmuNpcESPBB)
+      healthBg.Name = "HealthBg"
+      healthBg.AnchorPoint = Vector2.new(0.5, 0)
+      healthBg.Position = UDim2.new(0.5, 0, 0, 49)
+      healthBg.Size = UDim2.new(0, 72, 0, 15)
+      healthBg.BackgroundColor3 = Color3.fromRGB(12, 2, 4)
+      healthBg.BackgroundTransparency = 0.28
+      healthBg.BorderSizePixel = 0
+      healthBg.Visible = v10.Health.Enabled
+
+      Instance.new("UICorner", healthBg).CornerRadius = UDim.new(0, 5)
+
+      local instance142 = Instance.new("UIStroke", healthBg)
+      instance142.Color = Color3.fromRGB(120, 20, 30)
+      instance142.Thickness = 1
+      instance142.Transparency = 0.55
+
+      local instance143 = Instance.new("TextLabel", healthBg)
+      instance143.Size = UDim2.fromScale(1, 1)
+      instance143.BackgroundTransparency = 1
+      instance143.Font = Enum.Font.GothamBold
+      instance143.TextSize = 10
+      instance143.TextColor3 = v10.Health.Color
+      instance143.Text = ""
+      instance143.TextXAlignment = Enum.TextXAlignment.Center
+
+      v171.hpBg = healthBg
+      v171.hp = instance143
+    end
+
+    v171.hum = hum
+    v171.head = head8
+    v171.model = p65
+
+    v43[p65] = v171
+  end
+
+  local function f64(p67)
+    if not p67 or not p67.bb then
+      return
+    end
+
+    local v172 = 0
+
+    if p67.distBg then
+      p67.distBg.Visible = v10.Distance.Enabled
+
+      if v10.Distance.Enabled then
+        p67.distBg.Position = UDim2.new(0.5, 0, 0, v172)
+        v172 = v172 + 17
+      end
+    end
+
+    if p67.hpBg then
+      p67.hpBg.Visible = v10.Health.Enabled
+
+      if v10.Health.Enabled then
+        p67.hpBg.Position = UDim2.new(0.5, 0, 0, v172)
+        v172 = v172 + 17
+      end
+    end
+
+    if p67.headImg then
+      p67.headImg.Visible = v10.HeadImage.Enabled
+
+      if v10.HeadImage.Enabled then
+        local v173 = math.clamp(v10.HeadImage.Size or 28, 8, 300)
+
+        p67.headImg.Position = UDim2.new(0.5, 0, 0, v172 + 2)
+        p67.headImg.Size = UDim2.fromOffset(v173, v173)
+        p67.headImg.Image = v10.HeadImage.Image or ""
+        p67.headImg.BackgroundTransparency = v10.HeadImage.Image ~= "" and 1 or 0.15
+
+        v172 = v172 + 2 + v173
+      end
+    end
+
+    local v174 = math.max(100, (v10.HeadImage.Enabled and (v10.HeadImage.Size or 28) or 0) + 24)
+    local v175 = math.max(48, v172 + 4)
+
+    p67.bb.Size = UDim2.new(0, v174, 0, v175)
+    p67.bb.StudsOffset = Vector3.new(0, 2.4 + v175 * 0.012, 0)
+  end
+
+  local function f65(p68)
+    if not p68 then
+      return
+    end
+
+    if not v10.Enabled then
+      if p68.hl then
+        p68.hl.Enabled = false
+      end
+
+      if p68.bb then
+        p68.bb.Enabled = false
+      end
+
+      return
+    end
+
+    if p68.bb then
+      p68.bb.Enabled = true
+    end
+
+    if v10.Chams.Enabled then
+      if p68.hl and p68.hl.Parent then
+        p68.hl.Enabled = true
+        p68.hl.FillColor = v10.Chams.Fill
+        p68.hl.OutlineColor = v10.Chams.Outline
+        p68.hl.FillTransparency = v10.Chams.FillTransparency
+        p68.hl.OutlineTransparency = v10.Chams.OutlineTransparency
+      elseif p68.model and p68.model.Parent then
+        local niehmuNpcESP2 = Instance.new("Highlight")
+        niehmuNpcESP2.Name = "NIEHMU_NpcESP"
+        niehmuNpcESP2.Adornee = p68.model
+        niehmuNpcESP2.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        niehmuNpcESP2.FillColor = v10.Chams.Fill
+        niehmuNpcESP2.OutlineColor = v10.Chams.Outline
+        niehmuNpcESP2.FillTransparency = v10.Chams.FillTransparency
+        niehmuNpcESP2.OutlineTransparency = v10.Chams.OutlineTransparency
+        niehmuNpcESP2.Parent = p68.model
+
+        p68.hl = niehmuNpcESP2
+      end
+    elseif p68.hl then
+      p68.hl.Enabled = false
+    end
+
+    local enabled = v10.Distance.Enabled or v10.Health.Enabled or v10.HeadImage.Enabled
+
+    if enabled and not p68.bb and p68.head and p68.head.Parent then
+      local niehmuNpcESPBB2 = Instance.new("BillboardGui")
+      niehmuNpcESPBB2.Name = "NIEHMU_NpcESP_BB"
+      niehmuNpcESPBB2.Adornee = p68.head
+      niehmuNpcESPBB2.Size = UDim2.new(0, 100, 0, 64)
+      niehmuNpcESPBB2.StudsOffset = Vector3.new(0, 2.85, 0)
+      niehmuNpcESPBB2.AlwaysOnTop = true
+      niehmuNpcESPBB2.MaxDistance = 0
+      niehmuNpcESPBB2.Parent = niehmuNpcESPUI
+
+      p68.bb = niehmuNpcESPBB2
+
+      local headImage2 = Instance.new("ImageLabel", niehmuNpcESPBB2)
+      headImage2.Name = "HeadImage"
+      headImage2.AnchorPoint = Vector2.new(0.5, 0)
+      headImage2.Size = UDim2.fromOffset(v10.HeadImage.Size, v10.HeadImage.Size)
+      headImage2.BackgroundColor3 = v10.HeadImage.FallbackColor
+      headImage2.BackgroundTransparency = 0.15
+      headImage2.Image = v10.HeadImage.Image or ""
+      headImage2.ScaleType = Enum.ScaleType.Fit
+      headImage2.BorderSizePixel = 0
+
+      Instance.new("UICorner", headImage2).CornerRadius = UDim.new(0, 6)
+      p68.headImg = headImage2
+
+      local distanceBg2 = Instance.new("Frame", niehmuNpcESPBB2)
+      distanceBg2.Name = "DistanceBg"
+      distanceBg2.AnchorPoint = Vector2.new(0.5, 0)
+      distanceBg2.Position = UDim2.new(0.5, 0, 0, 32)
+      distanceBg2.Size = UDim2.new(0, 72, 0, 15)
+      distanceBg2.BackgroundColor3 = Color3.fromRGB(12, 2, 4)
+      distanceBg2.BackgroundTransparency = 0.28
+      distanceBg2.BorderSizePixel = 0
+
+      Instance.new("UICorner", distanceBg2).CornerRadius = UDim.new(0, 5)
+
+      local instance144 = Instance.new("TextLabel", distanceBg2)
+      instance144.Size = UDim2.fromScale(1, 1)
+      instance144.BackgroundTransparency = 1
+      instance144.Font = Enum.Font.GothamBold
+      instance144.TextSize = 10
+      instance144.TextColor3 = v10.Distance.Color
+      instance144.TextXAlignment = Enum.TextXAlignment.Center
+
+      p68.distBg = distanceBg2
+      p68.dist = instance144
+
+      local healthBg2 = Instance.new("Frame", niehmuNpcESPBB2)
+      healthBg2.Name = "HealthBg"
+      healthBg2.AnchorPoint = Vector2.new(0.5, 0)
+      healthBg2.Position = UDim2.new(0.5, 0, 0, 49)
+      healthBg2.Size = UDim2.new(0, 72, 0, 15)
+      healthBg2.BackgroundColor3 = Color3.fromRGB(12, 2, 4)
+      healthBg2.BackgroundTransparency = 0.28
+      healthBg2.BorderSizePixel = 0
+
+      Instance.new("UICorner", healthBg2).CornerRadius = UDim.new(0, 5)
+
+      local instance145 = Instance.new("TextLabel", healthBg2)
+      instance145.Size = UDim2.fromScale(1, 1)
+      instance145.BackgroundTransparency = 1
+      instance145.Font = Enum.Font.GothamBold
+      instance145.TextSize = 10
+      instance145.TextColor3 = v10.Health.Color
+      instance145.TextXAlignment = Enum.TextXAlignment.Center
+
+      p68.hpBg = healthBg2
+      p68.hp = instance145
+    elseif not enabled and p68.bb then
+      pcall(function() p68.bb:Destroy() end)
+      p68.bb, p68.headImg, p68.distBg, p68.dist, p68.hpBg, p68.hp = nil, nil, nil, nil, nil, nil
+    end
+
+    f64(p68)
+
+    if p68.dist then
+      p68.dist.TextColor3 = v10.Distance.Color
+    end
+
+    if p68.hp then
+      p68.hp.TextColor3 = v10.Health.Color
+    end
+  end
+
+  local function f66()
+    if not v10.Enabled then
+      if next(v43) then
+        f62()
+      end
+
+      return
+    end
+
+    if not v91 and tick() - v90 >= 0.07 then
+      v90 = tick()
+      task.spawn(f35)
+    end
+
+    local v176 = {}
+    local character13 = localPlayer.Character
+    local humanoidRootPart5 = character13 and character13:FindFirstChild("HumanoidRootPart")
+    local position12 = humanoidRootPart5 and humanoidRootPart5.Position
+
+    for i6 = 1, #v89 do
+      local v177 = v89[i6]
+
+      if v177 and v177.model and v177.model.Parent and v177.hum and v177.hum.Health > 0
+        and not f30(v177.model) then
+        local magnitude6 = 0
+
+        if position12 and v177.head and v177.head.Parent then
+          magnitude6 = (v177.head.Position - position12).Magnitude
+        end
+
+        v176[v177.model] = true
+
+        if not v43[v177.model] then
+          f63(v177.model, v177)
+        end
+
+        local v178 = v43[v177.model]
+
+        if v178 then
+          local humanoid4 = v177.model:FindFirstChildOfClass("Humanoid") or v177.hum
+
+          if not humanoid4 or not humanoid4.Parent or humanoid4.Health <= 0 then
+            f61(v177.model)
+          else
+            v178.hum = humanoid4
+            local v179 = magnitude6 <= 40
+
+            if v178.hl then
+              v178.hl.Enabled = v179 and v10.Chams.Enabled
+            end
+
+            if v178.bb then
+              v178.bb.Enabled = v179
+            end
+
+            if v179 then
+              f65(v178)
+
+              if v178.dist and v10.Distance.Enabled then
+                v178.dist.Text = math.floor(magnitude6) .. "m"
+              end
+
+              if v178.hp and v10.Health.Enabled then
+                local v180 = math.clamp(humanoid4.Health or 60, 0, 60)
+                v178.hp.Text = string.format("%d/60", math.floor(v180 + 0.5))
+              end
+            end
+          end
+        end
+      end
+    end
+
+    for key10 in pairs(v43) do
+      if not key10.Parent or v43[key10] and v43[key10].hum and v43[key10].hum.Health <= 0 then
+        f61(key10)
+      end
+    end
+  end
+
+  local function f67(p69)
+    v10.Enabled = p69 and true or false
+    f4(v26, v27, v10.Enabled)
+
+    if v10.Enabled then
+      v90 = 0
+      task.spawn(f35)
+      f66()
+    else
+      f62()
+    end
+  end
+
+  local function f68(p70)
+    v10.Chams.Enabled = p70 and true or false
+    f4(v28, v29, v10.Chams.Enabled)
+
+    if v10.Enabled then
+      for key11, value23 in pairs(v43) do
+        f65(value23)
+      end
+    end
+  end
+
+  local function f69(p71)
+    v10.Distance.Enabled = p71 and true or false
+    f4(v30, v31, v10.Distance.Enabled)
+
+    if v10.Enabled then
+      for key12, value24 in pairs(v43) do
+        f65(value24)
+      end
+    end
+  end
+
+  local function f70(p72)
+    v10.Health.Enabled = p72 and true or false
+    f4(v32, v33, v10.Health.Enabled)
+
+    if v10.Enabled then
+      for key13, value25 in pairs(v43) do
+        f65(value25)
+      end
+    end
+  end
+
+  local function f71(p73)
+    v10.HeadImage.Enabled = p73 and true or false
+    f4(v34, v35, v10.HeadImage.Enabled)
+
+    if v10.Enabled then
+      for key14, value26 in pairs(v43) do
+        f65(value26)
+      end
+    end
+  end
+
+  f4(v28, v29, v10.Chams.Enabled)
+  f4(v30, v31, v10.Distance.Enabled)
+  f4(v32, v33, v10.Health.Enabled)
+  f4(v34, v35, v10.HeadImage.Enabled)
+  f4(v26, v27, false)
+
+  local v181 = f7
+
+  function f7(p74)
+    v181(p74)
+
+    if v10.Enabled then
+      for key15, value27 in pairs(v43) do
+        f65(value27)
+      end
+    end
+  end
+
+  local function f72()
+    if not v10.Enabled then
+      return
+    end
+
+    for key16, value28 in pairs(v43) do
+      if value28.headImg then
+        value28.headImg.Image = ""
+        value28.headImg.Image = v10.HeadImage.Image or ""
+        value28.headImg.BackgroundTransparency = v10.HeadImage.Image ~= "" and 1 or 0.15
+      end
+
+      f65(value28)
+    end
+  end
+
+  local function f73()
+    if not v10.Enabled then
+      return
+    end
+
+    for key17, value29 in pairs(v43) do
+      f64(value29)
+    end
+  end
+
+  instance9.Activated:Connect(function() task.defer(f72) end)
+
+  do
+    local v182 = f8
+
+    function f8(p75)
+      v182(p75)
+      f73()
+    end
+  end
+
+  local function f74(p76)
+    v9.ESPEnabled = p76
+    v11.Enabled = p76
+    f4(v24, v25, p76)
+
+    if not p76 then
+      f9()
+    end
+  end
+
+  local function f75(p77)
+    if p77 then
+      if v12 and v13 == "smart" then
+        return
+      end
+
+      v13 = "smart"
+      v12 = true
+      f4(v22, v23, true)
+      v90 = 0
+      v92 = {}
+      v94 = {}
+      task.spawn(f35)
+      f55()
+      btnStatusIndicator.BackgroundColor3 = Color3.fromRGB(60, 220, 100)
+    else
+      if v13 == "smart" then
+        v13 = nil
+        v12 = false
+      end
+
+      f4(v22, v23, false)
+      f56()
+      btnStatusIndicator.BackgroundColor3 = v16.Off
+    end
+  end
+
+  v24.Activated:Connect(function() f74(not v9.ESPEnabled) end)
+  v26.Activated:Connect(function() f67(not v10.Enabled) end)
+  v28.Activated:Connect(function() f68(not v10.Chams.Enabled) end)
+  v30.Activated:Connect(function() f69(not v10.Distance.Enabled) end)
+  v32.Activated:Connect(function() f70(not v10.Health.Enabled) end)
+  v34.Activated:Connect(function() f71(not v10.HeadImage.Enabled) end)
+  v20.Activated:Connect(function() f60(not v165.Active) end)
+  v22.Activated:Connect(function() f75(not (v12 and v13 == "smart")) end)
+
+  if v18.autofarm_smart then
+    function v18.autofarm_smart.callback()
+      f75(not (v12 and v13 == "smart"))
+    end
+  end
+
+  if v18.esp then
+    function v18.esp.callback()
+      f74(not v9.ESPEnabled)
+    end
+  end
+
+  if v18.npc_esp then
+    function v18.npc_esp.callback()
+      f67(not v10.Enabled)
+    end
+  end
+
+  if v18.anti_dance then
+    function v18.anti_dance.callback()
+      f60(not v165.Active)
+    end
+  end
+
+  if v18.cam_fov then
+    function v18.cam_fov.callback()
+      f6(not v9.CameraFOVEnabled)
+    end
+  end
+
+  v36.Activated:Connect(function()
+    v12 = false
+    v13 = nil
+    f4(v22, v23, false)
+    f56()
+    f74(false)
+    f67(false)
+    f60(false)
+    f9()
+    f62()
+    btnStatusIndicator.BackgroundColor3 = v16.Off
+  end)
+
+  local v183, v184 = 0, 0
+
+  f2(runService.Heartbeat, function()
+    if not v14 then
+      return
+    end
+
+    local v185 = tick()
+
+    if v122 then
+      f54()
+    end
+
+    if v185 - v183 >= 0.55 then
+      v183 = v185
+
+      if v11.Enabled then
+        f10()
+      elseif next(v41) then
+        f9()
+      end
+    end
+
+    if v185 - v184 >= 0.12 then
+      v184 = v185
+
+      if v10.Enabled then
+        f66()
+      elseif next(v43) then
+        f62()
+      end
+    end
+  end)
+
+  f2(userInputService.InputBegan, function(p78, p79)
+    if p79 then
+      return
+    end
+
+    if p78.KeyCode == v9.CamFovUpKey and v9.CameraFOVEnabled then
+      f5(v9.CameraFOV + v9.CamFovStep)
+      local currentCamera14 = workspace.CurrentCamera
+
+      if currentCamera14 then
+        currentCamera14.FieldOfView = v9.CameraFOV
+      end
+    elseif p78.KeyCode == v9.CamFovDownKey and v9.CameraFOVEnabled then
+      f5(v9.CameraFOV - v9.CamFovStep)
+      local currentCamera15 = workspace.CurrentCamera
+
+      if currentCamera15 then
+        currentCamera15.FieldOfView = v9.CameraFOV
+      end
+    end
+  end)
+
+  f2(userInputService.InputBegan, function(p80, p81)
+    if p80.UserInputType ~= Enum.UserInputType.Keyboard then
+      return
+    end
+
+    if v19 then
+      local v186 = v18[v19]
+
+      if v186 then
+        v186.key = p80.KeyCode
+        v186.btn.Text = f3(p80.KeyCode)
+        v186.btn.TextColor3 = v16.TextMuted
+        v186.btn.BackgroundColor3 = v16.Off
+      end
+
+      v19 = nil
+      return
+    end
+
+    if p81 then
+      return
+    end
+
+    for key18, value30 in pairs(v18) do
+      if value30.key and p80.KeyCode == value30.key and value30.callback then
+        value30.callback()
+      end
+    end
+  end)
+
+  _G.NIEHMU_ScanNPCs = f35
+  _G.NIEHMU_MarkDead = f29
+
+  print("[NIEHMU] modules OK — Indetectable v12.8 engine intégré")
+end)
+
+if not v87 then
+  warn("[NIEHMU] modules error:", tostring(v88))
+end
+
+task.spawn(function()
+  local v187 = {
+    Enabled = false,
+    Key = Enum.KeyCode.F2,
+    Killfeed = {
+      Enabled = false,
+      X = 5,
+      Y = 5,
+      Width = 650,
+      Height = 300,
+      Color = Color3.fromRGB(0, 0, 0),
+      Transparency = 0,
+      CustomImage = "",
+    },
+    CustomNametag = { Text = "", TextSize = 16, TextColor = Color3.fromRGB(255, 255, 255) },
+    HideOtherNametags = { Enabled = true, Text = "" },
+    HideLocalEverywhere = { Enabled = true, IncludeCoreGui = true },
+    HideAllNamesOnScreen = { Enabled = true, MinNameLength = 3 },
+  }
+
+  local spOverlay, spKillfeed, uiStroke, frame3, imageLabel = nil, nil, nil, nil, nil
+  local v188 = setmetatable({}, { __mode = "k" })
+  local v189 = {}
+  local v190 = setmetatable({}, { __mode = "k" })
+
+  local function f76(gsub5)
+    if not gsub5 or gsub5 == "" then
+      return ""
+    end
+
+    gsub5 = tostring(gsub5):gsub("%s+", "")
+
+    if tonumber(gsub5) then
+      return "rbxassetid://" .. gsub5
+    end
+
+    if gsub5:sub(1, 7) == "http://" or gsub5:sub(1, 8) == "https://" then
+      if type(getcustomasset) == "function" and type(writefile) == "function" then
+        local v191, v192 = pcall(function() return game:HttpGet(gsub5) end)
+
+        if v191 and v192 then
+          writefile("sp_temp_img.png", v192)
+          return getcustomasset("sp_temp_img.png")
+        end
+      end
+    end
+
+    return gsub5
+  end
+
+  local function f77()
+    local spOverlay2 = v8 and v8:FindFirstChild("SP_Overlay")
+      or waitForChild and waitForChild:FindFirstChild("SP_Overlay")
+
+    if spOverlay2 then
+      spOverlay2:Destroy()
+    end
+
+    spOverlay = Instance.new("ScreenGui")
+    spOverlay.Name = "SP_Overlay"
+    spOverlay.ResetOnSpawn = false
+    spOverlay.IgnoreGuiInset = true
+    spOverlay.DisplayOrder = 9998
+    spOverlay.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    spOverlay.Parent = v8 or waitForChild
+
+    spKillfeed = Instance.new("Frame")
+    spKillfeed.Name = "SP_Killfeed"
+    spKillfeed.BackgroundColor3 = v187.Killfeed.Color
+    spKillfeed.BackgroundTransparency = v187.Killfeed.Transparency
+    spKillfeed.BorderSizePixel = 0
+    spKillfeed.Position = UDim2.fromOffset(v187.Killfeed.X, v187.Killfeed.Y)
+    spKillfeed.Size = UDim2.fromOffset(v187.Killfeed.Width, v187.Killfeed.Height)
+    spKillfeed.Visible = false
+    spKillfeed.Active = false
+    spKillfeed.ZIndex = 10
+    spKillfeed.ClipsDescendants = true
+    spKillfeed.Parent = spOverlay
+
+    uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = v16.Accent
+    uiStroke.Thickness = 2
+    uiStroke.Transparency = 1
+    uiStroke.Parent = spKillfeed
+
+    imageLabel = Instance.new("ImageLabel")
+    imageLabel.Size = UDim2.fromScale(1, 1)
+    imageLabel.BackgroundTransparency = 1
+    imageLabel.Image = f76(v187.Killfeed.CustomImage)
+    imageLabel.ScaleType = Enum.ScaleType.Stretch
+    imageLabel.Visible = v187.Killfeed.CustomImage ~= ""
+    imageLabel.ZIndex = 11
+    imageLabel.Parent = spKillfeed
+
+    frame3 = Instance.new("Frame")
+    frame3.BackgroundColor3 = v16.Accent
+    frame3.BorderSizePixel = 0
+    frame3.Size = UDim2.fromOffset(14, 14)
+    frame3.Position = UDim2.new(1, -14, 1, -14)
+    frame3.Visible = false
+    frame3.ZIndex = 12
+    frame3.Parent = spKillfeed
+  end
+
+  local function f78()
+    local v193 = {}
+
+    for index17, value31 in ipairs(players:GetPlayers()) do
+      v193[string.lower(value31.Name)] = value31
+
+      if value31.DisplayName and value31.DisplayName ~= "" then
+        local v194 = string.lower(value31.DisplayName)
+
+        if not v193[v194] then
+          v193[v194] = value31
+        end
+      end
+    end
+
+    v189 = v193
+  end
+
+  local function f79(p82)
+    local parent3 = p82.Parent
+
+    while parent3 do
+      if parent3:IsA("BillboardGui") or parent3:IsA("SurfaceGui") then
+        return true
+      end
+
+      parent3 = parent3.Parent
+    end
+
+    return false
+  end
+
+  local function f80(p83)
+    if p83.Name == "NametagCenterText" then
+      return true
+    end
+
+    if spOverlay and p83:IsDescendantOf(spOverlay) then
+      return true
+    end
+
+    if p83:FindFirstAncestor("SP_Cover") then
+      return true
+    end
+
+    return false
+  end
+
+  local function f81(p84)
+    local v195 = string.lower(p84)
+    local v196 = v189[v195]
+
+    if v196 then
+      return v196
+    end
+
+    local minNameLength = v187.HideAllNamesOnScreen.MinNameLength
+
+    for key19, value32 in pairs(v189) do
+      if #key19 >= minNameLength and string.find(v195, key19, 1, true) then
+        return value32
+      end
+    end
+
+    return nil
+  end
+
+  local function f82(p85, p86)
+    local v197 = p86 == localPlayer
+
+    if not p85:FindFirstChild("SP_Cover") then
+      local spCover = Instance.new("Frame")
+      spCover.Name = "SP_Cover"
+      spCover.Size = UDim2.new(1.3, 0, 1.4, 0)
+      spCover.Position = UDim2.new(0.5, 0, 0.5, 0)
+      spCover.AnchorPoint = Vector2.new(0.5, 0.5)
+      spCover.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+      spCover.BorderSizePixel = 0
+      spCover.ClipsDescendants = true
+      spCover.ZIndex = p85.ZIndex + 10
+
+      Instance.new("UICorner", spCover).CornerRadius = UDim.new(0, 4)
+
+      local nametagCenterText = Instance.new("TextLabel")
+      nametagCenterText.Name = "NametagCenterText"
+      nametagCenterText.Size = UDim2.fromScale(1, 1)
+      nametagCenterText.Position = UDim2.fromScale(0.5, 0.5)
+      nametagCenterText.AnchorPoint = Vector2.new(0.5, 0.5)
+      nametagCenterText.BackgroundTransparency = 1
+      nametagCenterText.Font = Enum.Font.GothamBold
+      nametagCenterText.TextSize = v187.CustomNametag.TextSize
+      nametagCenterText.TextColor3 = v187.CustomNametag.TextColor
+      nametagCenterText.TextXAlignment = Enum.TextXAlignment.Center
+      nametagCenterText.TextYAlignment = Enum.TextYAlignment.Center
+      nametagCenterText.ZIndex = spCover.ZIndex + 1
+      nametagCenterText.Parent = spCover
+
+      spCover.Parent = p85
+    end
+
+    local spCover2 = p85.SP_Cover
+    local enabled2 = v187.Enabled
+
+    if not v197 and not v187.HideOtherNametags.Enabled then
+      enabled2 = false
+    end
+
+    spCover2.Visible = enabled2
+    local nametagCenterText2 = spCover2:FindFirstChild("NametagCenterText")
+
+    if nametagCenterText2 then
+      nametagCenterText2.Text = v197 and v187.CustomNametag.Text or v187.HideOtherNametags.Text
+      nametagCenterText2.TextSize = v187.CustomNametag.TextSize
+    end
+  end
+
+  local function f83(p87)
+    local spCover3 = p87:FindFirstChild("SP_Cover")
+    local v198 = nil
+    local text7 = p87.Text or ""
+
+    if text7 ~= "" and not f80(p87) then
+      v198 = f81(text7)
+    end
+
+    if v198 then
+      if v198 == localPlayer then
+        if not v187.HideLocalEverywhere.Enabled and not f79(p87) then
+          v198 = nil
+        end
+      elseif not v187.HideAllNamesOnScreen.Enabled and not f79(p87) then
+        v198 = nil
+      end
+    end
+
+    if not v198 and v187.Enabled and v187.HideAllNamesOnScreen.Enabled and not f79(p87) then
+      local v199 = string.lower(text7)
+
+      if #v199 >= 3
+        and (string.find(v199, "kill", 1, true) or string.find(v199, "elimin", 1, true)) then
+        v198 = f81(text7) or localPlayer
+      end
+    end
+
+    if v198 then
+      f82(p87, v198)
+    elseif spCover3 then
+      spCover3.Visible = false
+    end
+  end
+
+  local function f84(p88)
+    if v190[p88] then
+      return
+    end
+
+    if f80(p88) then
+      return
+    end
+
+    v190[p88] = true
+
+    p88:GetPropertyChangedSignal("Text"):Connect(function()
+      if v187.Enabled then
+        f83(p88)
+      end
+    end)
+
+    if v187.Enabled then
+      f83(p88)
+    end
+  end
+
+  local function f85(p89, p90)
+    if p89:IsA("TextLabel") or p89:IsA("TextButton") then
+      if p90 and not f79(p89) then
+        return
+      end
+
+      f84(p89)
+    end
+  end
+
+  local function f86()
+    for key20 in pairs(v190) do
+      if key20.Parent then
+        f83(key20)
+      end
+    end
+  end
+
+  local function f87(p91, p92)
+    if p92 then
+      if not v188[p91] then
+        v188[p91] = {
+          distance = p91.NameDisplayDistance,
+          displayType = p91.DisplayDistanceType,
+        }
+      end
+
+      p91.NameDisplayDistance = 0
+      p91.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+    else
+      local v200 = v188[p91]
+
+      if v200 then
+        if p91.Parent then
+          p91.NameDisplayDistance = v200.distance
+          p91.DisplayDistanceType = v200.displayType
+        end
+
+        v188[p91] = nil
+      end
+    end
+  end
+
+  local function f88()
+    for index18, value33 in ipairs(players:GetPlayers()) do
+      local character14 = value33.Character
+      local humanoid5 = character14 and character14:FindFirstChildOfClass("Humanoid")
+
+      if humanoid5 then
+        local enabled3 = v187.Enabled
+
+        if value33 ~= localPlayer and not v187.HideOtherNametags.Enabled then
+          enabled3 = false
+        end
+
+        f87(humanoid5, enabled3)
+      end
+    end
+  end
+
+  local function f89(p93)
+    if not v187.HideLocalEverywhere.IncludeCoreGui then
+      return
+    end
+
+    local enabled4 = p93 and v187.Enabled and v187.HideLocalEverywhere.Enabled
+
+    pcall(function() starterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not enabled4) end)
+    pcall(function() starterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, not enabled4) end)
+  end
+
+  local function f90(visible)
+    for key21 in pairs(v190) do
+      local spCover4 = key21:FindFirstChild("SP_Cover")
+
+      if spCover4 and spCover4.Parent then
+        spCover4.Visible = visible
+      end
+    end
+  end
+
+  local function f91(p94)
+    v187.Enabled = p94 and true or false
+    f4(v37.Switch, v37.Knob, v187.Enabled)
+    f89(true)
+
+    if v187.Enabled then
+      task.spawn(function()
+        local getDescendants2 = workspace:GetDescendants()
+
+        for i7 = 1, #getDescendants2 do
+          f85(getDescendants2[i7], true)
+
+          if i7 % 400 == 0 then
+            task.wait()
+          end
+        end
+
+        f86()
+        f88()
+      end)
+
+      task.spawn(function()
+        local getDescendants3 = waitForChild:GetDescendants()
+
+        for i8 = 1, #getDescendants3 do
+          f85(getDescendants3[i8], false)
+
+          if i8 % 200 == 0 then
+            task.wait()
+          end
+        end
+      end)
+    else
+      f90(false)
+      f88()
+    end
+  end
+
+  local function f92()
+    if spKillfeed then
+      spKillfeed.Visible = v187.Enabled and v187.Killfeed.Enabled
+      spKillfeed.BackgroundTransparency = v187.Killfeed.Transparency
+      spKillfeed.Active = v187.Enabled
+    end
+
+    if uiStroke then
+      uiStroke.Transparency = 1
+    end
+
+    if frame3 then
+      frame3.Visible = false
+    end
+
+    f4(v37.Switch, v37.Knob, v187.Enabled)
+  end
+
+  f77()
+  f78()
+
+  task.spawn(function()
+    task.wait(0.5)
+    local getDescendants4 = waitForChild:GetDescendants()
+
+    for i9 = 1, #getDescendants4 do
+      f85(getDescendants4[i9], false)
+
+      if i9 % 200 == 0 then
+        task.wait()
+      end
+    end
+  end)
+
+  f2(waitForChild.DescendantAdded, function(p95) f85(p95, false) end)
+
+  f2(workspace.DescendantAdded, function(p96)
+    if v187.Enabled then
+      f85(p96, true)
+    end
+  end)
+
+  f2(players.PlayerAdded, function()
+    f78()
+
+    if v187.Enabled then
+      f86()
+    end
+  end)
+
+  f2(players.PlayerRemoving, function() task.defer(f78) end)
+
+  task.spawn(function()
+    while v14 do
+      task.wait(1.5)
+
+      if v187.Enabled then
+        f78()
+        f86()
+        f88()
+      end
+    end
+  end)
+
+  v37.Switch.Activated:Connect(function() f91(not v187.Enabled) end)
+
+  v37.OthersBtn.Activated:Connect(function()
+    v187.HideOtherNametags.Enabled = not v187.HideOtherNametags.Enabled
+
+    v37.OthersBtn.Text = v187.HideOtherNametags.Enabled and "Other players : ON"
+      or "Other players : OFF"
+
+    f86()
+    f88()
+  end)
+
+  v37.LocalBtn.Activated:Connect(function()
+    v187.HideLocalEverywhere.Enabled = not v187.HideLocalEverywhere.Enabled
+
+    v37.LocalBtn.Text = v187.HideLocalEverywhere.Enabled and "My pseudo : ON"
+      or "My pseudo : OFF"
+
+    f89(true)
+    f86()
+  end)
+
+  v37.ApplyBtn.Activated:Connect(function()
+    v187.Killfeed.CustomImage = ""
+    v187.CustomNametag.Text = v37.TextBox.Text
+
+    if imageLabel then
+      imageLabel.Image = ""
+      imageLabel.Visible = false
+    end
+
+    f92()
+
+    if v187.Enabled then
+      f86()
+    end
+  end)
+
+  if v18.streamproof then
+    function v18.streamproof.callback()
+      f91(not v187.Enabled)
+    end
+
+    v18.streamproof.key = v187.Key
+  end
+
+  f92()
+  print("[NIEHMU] streamproof backup OK")
+end)
+
+pcall(function()
+  niehmuPanel4.Enabled = true
+  frame.Visible = true
+end)
+
+local function f93(...)
+  print("[NIEHMU][STATS]", ...)
+end
+
+v44 = {
+  NpcKilled = 0,
+  MoneyEarned = 0,
+  MoneyLast = nil,
+  MoneyValue = nil,
+  MoneyHud = nil,
+  MoneyName = nil,
+  MoneyAvailable = false,
+  MoneyConn = nil,
+  MoneyHudConn = nil,
+  CountedModels = setmetatable({}, { __mode = "k" }),
+  CountedHumans = setmetatable({}, { __mode = "k" }),
+  Open = false,
+  UI = nil,
+}
+
+local function f94(p97)
+  p97 = math.floor(tonumber(p97) or 0)
+  local v201 = p97 < 0 and "-" or ""
+  p97 = math.abs(p97)
+  return v201 .. "$" .. tostring(p97):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+end
+
+local function f95()
+  local ui = v44.UI
+
+  if ui and ui.NpcValue then
+    ui.NpcValue.Text = tostring(v44.NpcKilled)
+    f93("UI npc killed =", v44.NpcKilled)
+  else
+    f93("UI npc missing — value still", v44.NpcKilled)
+  end
+end
+
+local function f96()
+  local ui2 = v44.UI
+
+  if not (ui2 and ui2.MoneyValue) then
+    f93("UI money missing — earned", v44.MoneyEarned)
+    return
+  end
+
+  if v44.MoneyAvailable then
+    ui2.MoneyValue.Text = f94(v44.MoneyEarned)
+  else
+    ui2.MoneyValue.Text = "N/A"
+  end
+
+  f93("UI money earned =", v44.MoneyEarned, "last", v44.MoneyLast)
+end
+
+local function f97(p98, p99)
+  if p99 then
+    if v44.CountedHumans[p99] then
+      return false
+    end
+
+    v44.CountedHumans[p99] = true
+  elseif p98 then
+    if v44.CountedModels[p98] then
+      return false
+    end
+
+    v44.CountedModels[p98] = true
+  else
+    return false
+  end
+
+  v44.NpcKilled = v44.NpcKilled + 1
+  f93("KILL +1 total", v44.NpcKilled, "model", p98 and p98.Name)
+  f95()
+  return true
+end
+
+local v202 = {
+  "Cash", "Money", "Coins", "Coin", "Balance", "Dollars", "Gold", "Beli", "Yen", "Currency",
+}
+
+local function f98(p100)
+  if not p100 or p100 == "" then
+    return nil
+  end
+
+  p100 = tostring(p100)
+  local gsub6 = p100:gsub("[^%d%.,]", "")
+
+  if gsub6 == "" then
+    return nil
+  end
+
+  if gsub6:find("%.") and not gsub6:find(",") then
+    local v203 = {}
+
+    for match in gsub6:gmatch("[^%.]+") do
+      v203[#v203 + 1] = match
+    end
+
+    if #v203 > 1 then
+      local v204 = v203[#v203]
+
+      if #v204 == 3 then
+        gsub6 = table.concat(v203, "")
+      else
+        gsub6 = table.concat(v203, "", 1, #v203 - 1) .. "." .. v204
+      end
+    end
+  elseif gsub6:find(",") then
+    local v205, v206 = gsub6:match("^(%d[%d%.,]*)%,(%d+)$")
+
+    if v206 and #v206 <= 2 then
+      gsub6 = (v205 or ""):gsub("[^%d]", "") .. "." .. v206
+    else
+      gsub6 = gsub6:gsub(",", "")
+    end
+  end
+
+  return tonumber(gsub6)
+end
+
+local function f99()
+  local leaderstats = localPlayer:FindFirstChild("leaderstats")
+    or localPlayer:FindFirstChild("Stats")
+
+  if leaderstats then
+    for index19, value34 in ipairs(v202) do
+      local findFirstChild = leaderstats:FindFirstChild(value34)
+
+      if findFirstChild
+        and (findFirstChild:IsA("IntValue") or findFirstChild:IsA("NumberValue")) then
+        return findFirstChild, value34, "leaderstats"
+      end
+    end
+
+    for index20, value35 in ipairs(leaderstats:GetChildren()) do
+      if value35:IsA("IntValue") or value35:IsA("NumberValue") then
+        return value35, value35.Name, "leaderstats"
+      end
+    end
+  end
+
+  for index21, value36 in ipairs(v202) do
+    local findFirstChild2 = localPlayer:FindFirstChild(value36)
+
+    if findFirstChild2
+      and (findFirstChild2:IsA("IntValue") or findFirstChild2:IsA("NumberValue")) then
+      return findFirstChild2, value36, "player"
+    end
+  end
+
+  for index22, value37 in ipairs(v202) do
+    local v207, v208 = pcall(function() return localPlayer:GetAttribute(value37) end)
+
+    if v207 and type(v208) == "number" then
+      return nil, value37, "attribute:" .. value37
+    end
+  end
+
+  return nil, nil, nil
+end
+
+local function f100()
+  local v209, v210 = nil, -1
+
+  local function f101(p101)
+    if not (p101:IsA("TextLabel") or p101:IsA("TextButton") or p101:IsA("TextBox")) then
+      return
+    end
+
+    local text8 = p101.Text or ""
+
+    if not (text8:find("%$") or text8:lower():find("cash")) then
+      return
+    end
+
+    local v211 = f98(text8)
+
+    if not v211 or v211 < 0 then
+      return
+    end
+
+    local v212 = 1
+
+    if text8:find("%$") then
+      v212 = v212 + 5
+    end
+
+    local absolutePosition4 = p101.AbsolutePosition
+
+    if absolutePosition4.Y > 0 and absolutePosition4.Y < 160 then
+      v212 = v212 + 3
+    end
+
+    if absolutePosition4.X > 300 then
+      v212 = v212 + 2
+    end
+
+    if v211 >= 100 then
+      v212 = v212 + 1
+    end
+
+    if v212 > v210 then
+      v210 = v212
+      v209 = p101
+    end
+  end
+
+  pcall(function()
+    for index23, value38 in ipairs(waitForChild:GetDescendants()) do
+      f101(value38)
+    end
+  end)
+
+  return v209
+end
+
+function f13()
+  if v44.MoneyValue then
+    local v213 = tonumber(v44.MoneyValue.Value)
+
+    if v213 then
+      return v213
+    end
+  end
+
+  if v44.MoneyHud and v44.MoneyHud.Parent then
+    local v214 = f98(v44.MoneyHud.Text)
+
+    if v214 then
+      return v214
+    end
+  end
+
+  for index24, value39 in ipairs(v202) do
+    local v215, v216 = pcall(function() return localPlayer:GetAttribute(value39) end)
+
+    if v215 and type(v216) == "number" then
+      return v216
+    end
+  end
+
+  return nil
+end
+
+local function f102()
+  local v217 = f13()
+
+  if v217 == nil then
+    return
+  end
+
+  local moneyLast = v44.MoneyLast
+
+  if moneyLast == nil then
+    v44.MoneyLast = v217
+    v44.MoneyAvailable = true
+
+    f93("money baseline", v217)
+    f96()
+    return
+  end
+
+  if v217 == moneyLast then
+    return
+  end
+
+  local v218 = v217 - moneyLast
+
+  v44.MoneyLast = v217
+  v44.MoneyAvailable = true
+
+  if v218 > 0 then
+    v44.MoneyEarned = v44.MoneyEarned + v218
+    f93("money +", v218, "total earned", v44.MoneyEarned, "balance", v217)
+    f96()
+  else
+    f93("money non-gain delta", v218, "balance", v217)
+    f96()
+  end
+end
+
+local function f103()
+  if v44.MoneyConn then
+    pcall(function() v44.MoneyConn:Disconnect() end)
+    v44.MoneyConn = nil
+  end
+
+  if v44.MoneyHudConn then
+    pcall(function() v44.MoneyHudConn:Disconnect() end)
+    v44.MoneyHudConn = nil
+  end
+
+  local v219, v220, v221 = f99()
+
+  if v219 then
+    v44.MoneyValue = v219
+    v44.MoneyName = v220
+    v44.MoneyAvailable = true
+
+    if v44.MoneyLast == nil then
+      v44.MoneyLast = tonumber(v219.Value) or 0
+      f93("bind value", v220, v221, v44.MoneyLast)
+    end
+
+    local v222, moneyConn = pcall(function()
+      return v219:GetPropertyChangedSignal("Value"):Connect(f102)
+    end)
+
+    if v222 then
+      v44.MoneyConn = moneyConn
+    end
+  else
+    v44.MoneyValue = nil
+  end
+
+  local v223 = f100()
+
+  if v223 then
+    v44.MoneyHud = v223
+    v44.MoneyAvailable = true
+
+    local v224 = f98(v223.Text)
+
+    if v44.MoneyLast == nil and v224 then
+      v44.MoneyLast = v224
+      f93("bind HUD", v223:GetFullName(), v224)
+    elseif v224 then
+      f93("HUD found", v223:GetFullName(), "text", v223.Text)
+    end
+
+    local v225, moneyHudConn = pcall(function()
+      return v223:GetPropertyChangedSignal("Text"):Connect(f102)
+    end)
+
+    if v225 then
+      v44.MoneyHudConn = moneyHudConn
+    end
+  else
+    v44.MoneyHud = nil
+    f93("HUD label not found yet")
+  end
+
+  if v44.MoneyValue or v44.MoneyHud then
+    v44.MoneyAvailable = true
+    f96()
+  else
+    v44.MoneyAvailable = false
+    f96()
+  end
+end
+
+task.spawn(function()
+  local count7 = 0
+
+  while v14 do
+    task.wait(0.25)
+    count7 = count7 + 1
+
+    if count7 == 1 or count7 % 8 == 0 or not v44.MoneyHud then
+      f103()
+    end
+
+    if f13() == nil then
+      if count7 % 4 == 0 then
+        pcall(function()
+          local v226, v227 = nil, nil
+
+          for index25, value40 in ipairs(waitForChild:GetDescendants()) do
+            if value40:IsA("TextLabel") or value40:IsA("TextButton") then
+              local text9 = value40.Text or ""
+
+              if text9:find("%$") then
+                local v228 = f98(text9)
+
+                if v228 and (not v226 or v228 > v226) then
+                  v226, v227 = v228, value40
+                end
+              end
+            end
+          end
+
+          if v227 then
+            v44.MoneyHud = v227
+            v44.MoneyAvailable = true
+
+            if v44.MoneyLast == nil then
+              v44.MoneyLast = v226
+              f93("brute baseline", v226, v227:GetFullName())
+              f96()
+            elseif v226 ~= v44.MoneyLast then
+              local v229 = v226 - v44.MoneyLast
+              v44.MoneyLast = v226
+
+              if v229 > 0 then
+                v44.MoneyEarned = v44.MoneyEarned + v229
+                f93("brute money +", v229, "total", v44.MoneyEarned)
+              end
+
+              f96()
+            end
+          end
+        end)
+      end
+    else
+      f102()
+    end
+  end
+end)
+
+pcall(function()
+  waitForChild.DescendantAdded:Connect(function(descendant)
+    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+      task.defer(function()
+        local text10 = descendant.Text or ""
+
+        if text10:find("%$") and f98(text10) then
+          f103()
+        end
+      end)
+    end
+  end)
+end)
+
+niehmuStats = Instance.new("ScreenGui")
+niehmuStats.Name = "NIEHMU_Stats"
+niehmuStats.ResetOnSpawn = false
+niehmuStats.IgnoreGuiInset = true
+niehmuStats.DisplayOrder = 10000
+niehmuStats.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+niehmuStats.Enabled = true
+
+pcall(function() niehmuStats.Parent = v8 or waitForChild end)
+
+local statsPanel = Instance.new("Frame")
+statsPanel.Name = "StatsPanel"
+statsPanel.Size = UDim2.new(0, 210, 0, 148)
+statsPanel.Position = UDim2.new(1, -230, 0.15, 0)
+statsPanel.BackgroundColor3 = Color3.fromRGB(6, 0, 1)
+statsPanel.BackgroundTransparency = 0.08
+statsPanel.BorderSizePixel = 0
+statsPanel.Visible = false
+statsPanel.ClipsDescendants = true
+statsPanel.Parent = niehmuStats
+
+Instance.new("UICorner", statsPanel).CornerRadius = UDim.new(0, 12)
+
+local instance146 = Instance.new("UIStroke", statsPanel)
+instance146.Color = Color3.fromRGB(90, 10, 18)
+instance146.Thickness = 1.2
+instance146.Transparency = 0.35
+
+local instance147 = Instance.new("Frame", statsPanel)
+instance147.Size = UDim2.fromScale(1, 1)
+instance147.BackgroundColor3 = Color3.fromRGB(14, 0, 2)
+instance147.BackgroundTransparency = 0.45
+instance147.BorderSizePixel = 0
+instance147.ZIndex = 1
+
+Instance.new("UICorner", instance147).CornerRadius = UDim.new(0, 12)
+
+local instance148 = Instance.new("Frame", statsPanel)
+instance148.Size = UDim2.new(1, 0, 0, 32)
+instance148.BackgroundColor3 = v16.Glass
+instance148.BackgroundTransparency = 0.28
+instance148.BorderSizePixel = 0
+instance148.ZIndex = 3
+
+Instance.new("UICorner", instance148).CornerRadius = UDim.new(0, 12)
+
+local instance149 = Instance.new("Frame", instance148)
+instance149.Size = UDim2.new(0, 2, 0, 20)
+instance149.Position = UDim2.new(0, 0, 0.5, -10)
+instance149.BackgroundColor3 = Color3.fromRGB(255, 60, 80)
+instance149.BorderSizePixel = 0
+
+Instance.new("UICorner", instance149).CornerRadius = UDim.new(1, 0)
+
+local instance150 = Instance.new("TextLabel", instance148)
+instance150.Size = UDim2.new(1, -80, 1, 0)
+instance150.Position = UDim2.new(0, 16, 0, 0)
+instance150.BackgroundTransparency = 1
+instance150.Text = "STATS"
+instance150.TextColor3 = Color3.fromRGB(255, 230, 232)
+instance150.Font = Enum.Font.GothamBlack
+instance150.TextSize = 11
+instance150.TextXAlignment = Enum.TextXAlignment.Left
+instance150.ZIndex = 4
+
+local instance151 = Instance.new("TextLabel", instance148)
+instance151.Size = UDim2.new(0, 10, 0, 10)
+instance151.Position = UDim2.new(1, -44, 0.5, -5)
+instance151.BackgroundTransparency = 1
+instance151.Text = "●"
+instance151.TextColor3 = Color3.fromRGB(120, 220, 140)
+instance151.Font = Enum.Font.GothamBold
+instance151.TextSize = 10
+instance151.ZIndex = 4
+
+local instance152 = Instance.new("TextButton", instance148)
+instance152.Size = UDim2.new(0, 14, 0, 14)
+instance152.Position = UDim2.new(1, -28, 0.5, -7)
+instance152.BackgroundColor3 = Color3.fromRGB(190, 18, 30)
+instance152.Text = ""
+instance152.AutoButtonColor = false
+instance152.ZIndex = 5
+
+Instance.new("UICorner", instance152).CornerRadius = UDim.new(1, 0)
+
+do
+  local v230, position13, position14 = false, nil, nil
+
+  instance148.InputBegan:Connect(function(input6)
+    if input6.UserInputType == Enum.UserInputType.MouseButton1
+      or input6.UserInputType == Enum.UserInputType.Touch then
+      v230 = true
+      position13 = input6.Position
+      position14 = statsPanel.Position
+    end
+  end)
+
+  instance148.InputEnded:Connect(function(input7)
+    if input7.UserInputType == Enum.UserInputType.MouseButton1
+      or input7.UserInputType == Enum.UserInputType.Touch then
+      v230 = false
+    end
+  end)
+
+  userInputService.InputChanged:Connect(function(input8)
+    if v230
+      and (input8.UserInputType == Enum.UserInputType.MouseMovement
+        or input8.UserInputType == Enum.UserInputType.Touch) then
+      local v231 = input8.Position - position13
+
+      statsPanel.Position = UDim2.new(
+        position14.X.Scale, position14.X.Offset + v231.X, position14.Y.Scale,
+        position14.Y.Offset + v231.Y
+      )
+    end
+  end)
+end
+
+local function f104(p102, p103, text11)
+  local instance153 = Instance.new("Frame", p102)
+  instance153.Size = UDim2.new(1, -16, 0, 36)
+  instance153.Position = UDim2.new(0, 8, 0, p103)
+  instance153.BackgroundColor3 = Color3.fromRGB(12, 1, 3)
+  instance153.BackgroundTransparency = 0.18
+  instance153.BorderSizePixel = 0
+  instance153.ZIndex = 3
+
+  Instance.new("UICorner", instance153).CornerRadius = UDim.new(0, 8)
+
+  local instance154 = Instance.new("UIStroke", instance153)
+  instance154.Color = Color3.fromRGB(90, 10, 18)
+  instance154.Thickness = 1
+  instance154.Transparency = 0.5
+
+  local instance155 = Instance.new("Frame", instance153)
+  instance155.Size = UDim2.new(0, 2, 0, 18)
+  instance155.Position = UDim2.new(0, 8, 0.5, -9)
+  instance155.BackgroundColor3 = Color3.fromRGB(220, 30, 45)
+  instance155.BorderSizePixel = 0
+  instance155.ZIndex = 4
+
+  Instance.new("UICorner", instance155).CornerRadius = UDim.new(1, 0)
+
+  local instance156 = Instance.new("TextLabel", instance153)
+  instance156.Size = UDim2.new(1, -70, 0, 14)
+  instance156.Position = UDim2.new(0, 16, 0, 3)
+  instance156.BackgroundTransparency = 1
+  instance156.Text = text11
+  instance156.TextColor3 = v16.TextDim
+  instance156.Font = Enum.Font.GothamBold
+  instance156.TextSize = 9
+  instance156.TextXAlignment = Enum.TextXAlignment.Left
+  instance156.ZIndex = 4
+
+  local instance157 = Instance.new("TextLabel", instance153)
+  instance157.Size = UDim2.new(1, -20, 0, 16)
+  instance157.Position = UDim2.new(0, 16, 0, 16)
+  instance157.BackgroundTransparency = 1
+  instance157.Text = "0"
+  instance157.TextColor3 = Color3.fromRGB(255, 240, 242)
+  instance157.Font = Enum.Font.GothamBlack
+  instance157.TextSize = 14
+  instance157.TextXAlignment = Enum.TextXAlignment.Left
+  instance157.ZIndex = 4
+
+  local instance158 = Instance.new("TextLabel", instance153)
+  instance158.Visible = false
+  instance158.Size = UDim2.new(0, 0, 0, 0)
+  instance158.Text = ""
+
+  return instance153, instance157, instance158
+end
+
+local v232, v233, npcSub = f104(statsPanel, 38, "💀  NPC KILLED")
+local v234, v235, moneySub = f104(statsPanel, 78, "💰  TOTAL MONEY EARNED")
+
+v44.UI = {
+  NpcValue = v233,
+  NpcSub = npcSub,
+  MoneyValue = v235,
+  MoneySub = moneySub,
+}
+
+local instance159 = Instance.new("TextButton", statsPanel)
+instance159.Size = UDim2.new(1, -16, 0, 22)
+instance159.Position = UDim2.new(0, 8, 1, -28)
+instance159.BackgroundColor3 = Color3.fromRGB(40, 4, 8)
+instance159.BackgroundTransparency = 0.1
+instance159.Text = "RESET SESSION"
+instance159.TextColor3 = Color3.fromRGB(255, 180, 190)
+instance159.Font = Enum.Font.GothamBold
+instance159.TextSize = 10
+instance159.AutoButtonColor = false
+instance159.ZIndex = 4
+
+Instance.new("UICorner", instance159).CornerRadius = UDim.new(0, 10)
+
+local instance160 = Instance.new("UIStroke", instance159)
+instance160.Color = Color3.fromRGB(140, 20, 30)
+instance160.Thickness = 1
+instance160.Transparency = 0.4
+
+local v236 = false
+
+instance159.Activated:Connect(function()
+  if not v236 then
+    v236 = true
+
+    instance159.Text = "CONFIRM RESET ?"
+    instance159.TextColor3 = Color3.fromRGB(255, 80, 90)
+
+    task.delay(2.5, function()
+      if v236 then
+        v236 = false
+        instance159.Text = "RESET SESSION"
+        instance159.TextColor3 = Color3.fromRGB(255, 180, 190)
+      end
+    end)
+
+    return
+  end
+
+  v236 = false
+
+  v44.NpcKilled = 0
+  v44.MoneyEarned = 0
+  v44.CountedModels = setmetatable({}, { __mode = "k" })
+  v44.CountedHumans = setmetatable({}, { __mode = "k" })
+  v44.MoneyLast = f13()
+
+  f93("RESET — baseline", v44.MoneyLast)
+  f95()
+  f96()
+  v233.Text = "0"
+
+  if v44.MoneyAvailable then
+    v235.Text = "$0"
+  else
+    v235.Text = "N/A"
+  end
+
+  instance159.Text = "RESET SESSION"
+  instance159.TextColor3 = Color3.fromRGB(255, 180, 190)
+end)
+
+local function f105(p104)
+  v44.Open = p104 and true or false
+
+  if v44.Open then
+    statsPanel.Visible = true
+    statsPanel.BackgroundTransparency = 1
+
+    statsPanel.Position = UDim2.new(
+      statsPanel.Position.X.Scale, statsPanel.Position.X.Offset, statsPanel.Position.Y.Scale,
+      statsPanel.Position.Y.Offset - 12
+    )
+
+    tweenService:Create(statsPanel, tweenInfo4, {
+      BackgroundTransparency = 0.08,
+      Position = UDim2.new(
+        statsPanel.Position.X.Scale, statsPanel.Position.X.Offset, statsPanel.Position.Y.Scale,
+        statsPanel.Position.Y.Offset + 12
+      ),
+    }):Play()
+
+    f103()
+    v233.Text = tostring(v44.NpcKilled)
+
+    if v44.MoneyAvailable then
+      v235.Text = f94(v44.MoneyEarned)
+    end
+  else
+    tweenService:Create(statsPanel, tweenInfo3, { BackgroundTransparency = 1 }):Play()
+
+    task.delay(0.2, function()
+      if not v44.Open then
+        statsPanel.Visible = false
+      end
+    end)
+  end
+end
+
+instance152.Activated:Connect(function() f105(false) end)
+
+if v38 then
+  v38.Activated:Connect(function() f105(not v44.Open) end)
+end
+
+task.defer(f103)
+
+f2(localPlayer.ChildAdded, function(p105)
+  if p105.Name == "leaderstats" then
+    task.wait(0.2)
+    f103()
+  end
+end)
+
+task.spawn(function()
+  while v14 do
+    task.wait(1.4)
+
+    pcall(function()
+      if _G.NIEHMU_ScanNPCs then
+        _G.NIEHMU_ScanNPCs()
+      end
+    end)
+  end
+end)
+
+do
+  local v237 = setmetatable({}, { __mode = "k" })
+  local v238 = setmetatable({}, { __mode = "k" })
+
+  local function f106(p106)
+    for index26, value41 in ipairs(players:GetPlayers()) do
+      if value41.Character == p106 then
+        return true
+      end
+    end
+
+    return false
+  end
+
+  local function f107(p107, p108)
+    if not p107 or v237[p107] then
+      return
+    end
+
+    v237[p107] = true
+    v238[p107] = p107.Health
+
+    pcall(function()
+      p107.Died:Connect(function()
+        f93("event Died", p108 and p108.Name)
+        f97(p108, p107)
+      end)
+    end)
+
+    pcall(function()
+      p107.HealthChanged:Connect(function(p109)
+        local v239 = v238[p107]
+        v238[p107] = p109
+
+        if type(p109) == "number" and p109 <= 0 then
+          f93("event Health<=0", p108 and p108.Name, p109)
+          f97(p108, p107)
+        elseif type(v239) == "number" and v239 > 0 and type(p109) == "number" and p109 <= 0 then
+          f97(p108, p107)
+        end
+      end)
+    end)
+  end
+
+  local function f108(p110)
+    if not p110:IsA("Humanoid") then
+      return
+    end
+
+    local parent4 = p110.Parent
+
+    if not (parent4 and parent4:IsA("Model")) then
+      return
+    end
+
+    if f106(parent4) then
+      return
+    end
+
+    if p110.MaxHealth > 0 and p110.MaxHealth < math.huge then
+      f107(p110, parent4)
+    end
+  end
+
+  task.spawn(function()
+    task.wait(0.25)
+
+    for index27, value42 in ipairs(workspace:GetDescendants()) do
+      f108(value42)
+    end
+
+    workspace.DescendantAdded:Connect(function(descendant2) task.defer(f108, descendant2) end)
+
+    while v14 do
+      task.wait(0.2)
+
+      for key22, value43 in pairs(v237) do
+        if key22 and key22.Parent then
+          local health3 = key22.Health
+          local v240 = v238[key22]
+          v238[key22] = health3
+
+          if type(v240) == "number" and v240 > 0 and type(health3) == "number" and health3 <= 0 then
+            f93("poll death", key22.Parent and key22.Parent.Name)
+            f97(key22.Parent, key22)
+          end
+        end
+      end
+    end
+  end)
+end
+
+v4._impl = f97
+v4.Ready = true
+
+for index28, value44 in ipairs(v4._queue) do
+  f97(value44[1], value44[2])
+end
+
+v4._queue = {}
+_G.NIEHMU_StatsRegisterKill = f97
+f93("pipeline online, flushed queue")
+print("[NIEHMU] session statistics ready")
+
+task.spawn(function()
+  local total = 0
+
+  while v14 do
+    total = total + 0.008
+    local v241 = (math.sin(total) + 1) / 2
+
+    pcall(function()
+      instance6.Transparency = v241 * 0.22
+      instance5.TextColor3 = Color3.fromRGB(0, 0, 0)
+
+      if instance8 then
+        instance8.Transparency = 0.15 + v241 * 0.2
+      end
+
+      if instance7 then
+        instance7.TextColor3 = Color3.fromRGB(0, 0, 0)
+      end
+    end)
+
+    task.wait(0.05)
+  end
+end)
+
+task.spawn(function()
+  local v242 = 0.8
+
+  while v14 do
+    v242 = v242 + 0.03
+    local v243 = (math.sin(v242) + 1) / 2
+    pcall(function() v17.Transparency = 0.08 + v243 * 0.32 end)
+    task.wait(0.05)
+  end
+end)
+
+task.spawn(function()
+  local v244 = {}
+  local random = Random.new()
+
+  for i10 = 1, 55 do
+    local nextInteger = random:NextInteger(4, 9)
+
+    local frame4 = Instance.new("Frame")
+    frame4.Size = UDim2.fromOffset(nextInteger, nextInteger)
+    frame4.AnchorPoint = Vector2.new(0.5, 0.5)
+
+    frame4.BackgroundColor3 = Color3.fromRGB(
+      random:NextInteger(160, 235), random:NextInteger(5, 14), random:NextInteger(10, 22)
+    )
+
+    frame4.BackgroundTransparency = random:NextNumber(0.1, 0.42)
+    frame4.BorderSizePixel = 0
+    frame4.ZIndex = 0
+    frame4.Active = false
+
+    Instance.new("UICorner", frame4).CornerRadius = UDim.new(1, 0)
+
+    if nextInteger >= 7 then
+      local instance161 = Instance.new("UIStroke", frame4)
+      instance161.Color = Color3.fromRGB(220, 15, 28)
+      instance161.Thickness = 1.2
+      instance161.Transparency = 0.52
+    end
+
+    frame4.Parent = instance4
+    local nextNumber = random:NextNumber(0.02, 0.98)
+    local nextNumber2 = random:NextNumber(-0.6, 1.05)
+
+    local nextNumber3 = nextInteger <= 5 and random:NextNumber(0.0022, 0.0048)
+      or random:NextNumber(0.001, 0.0028)
+
+    local nextNumber4 = random:NextNumber(-0.00022, 0.00022)
+    frame4.Position = UDim2.new(nextNumber, 0, nextNumber2, 0)
+
+    table.insert(v244, {
+      frame = frame4,
+      x = nextNumber,
+      y = nextNumber2,
+      speed = nextNumber3,
+      drift = nextNumber4,
+    })
+  end
+
+  while v14 do
+    for index29, value45 in ipairs(v244) do
+      value45.y = value45.y + value45.speed
+      value45.x = value45.x + value45.drift
+
+      if value45.y > 1.06 then
+        value45.y = -0.05
+        value45.x = random:NextNumber(0.02, 0.98)
+      end
+
+      if value45.x < 0 then
+        value45.x = 0.98
+      end
+
+      if value45.x > 1 then
+        value45.x = 0.02
+      end
+
+      pcall(function() value45.frame.Position = UDim2.new(value45.x, 0, value45.y, 0) end)
+    end
+
+    task.wait(0.033)
+  end
+
+  for index30, value46 in ipairs(v244) do
+  end
+end)
+
+local function f109(p111)
+  if not p111 or not p111:IsA("Frame") then
+    return
+  end
+
+  local backgroundTransparency = p111.BackgroundTransparency
+
+  p111.MouseEnter:Connect(function()
+    tweenService:Create(p111, tweenInfo2, {
+      BackgroundColor3 = Color3.fromRGB(26, 2, 4),
+      BackgroundTransparency = 0.05,
+    }):Play()
+  end)
+
+  p111.MouseLeave:Connect(function()
+    tweenService:Create(p111, tweenInfo2, {
+      BackgroundColor3 = v16.Row,
+      BackgroundTransparency = backgroundTransparency,
+    }):Play()
+  end)
+
+  p111.MouseButton1Down:Connect(function()
+    tweenService:Create(p111, tweenInfo, { BackgroundTransparency = 0 }):Play()
+  end)
+
+  p111.MouseButton1Up:Connect(function()
+    tweenService:Create(p111, tweenInfo2, {
+      BackgroundColor3 = v16.Row,
+      BackgroundTransparency = 0.05,
+    }):Play()
+  end)
+end
+
+task.spawn(function()
+  task.wait(0.1)
+
+  for key23, value47 in pairs({ instance13, instance14, instance15, instance16 }) do
+    if value47 then
+      for index31, value48 in ipairs(value47:GetChildren()) do
+        if value48:IsA("Frame") and value48:FindFirstChildOfClass("TextButton") then
+          f109(value48)
+        end
+      end
+    end
+  end
+end)
+
+task.spawn(function()
+  frame.Position = UDim2.new(0.5, -166, 0.04, 0)
+  frame.BackgroundTransparency = 0.92
+
+  tweenService:Create(
+    frame, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    { Position = UDim2.new(0.5, -166, 0.1, 0), BackgroundTransparency = 0.08 }
+  ):Play()
+end)
